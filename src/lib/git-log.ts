@@ -13,6 +13,8 @@ export interface GitCommit {
   /** Committer wall-clock time, HH:MM. */
   time: string;
   message: string;
+  /** Author name as recorded in the reflog (or pasted export). */
+  author?: string;
 }
 
 export interface GitDayGroup {
@@ -23,10 +25,10 @@ export interface GitDayGroup {
 }
 
 const REFLOG_COMMIT_RE =
-  /^\S+\s\S+\s.+?\s<[^>]*>\s(\d+)\s([+-]\d{4})\tcommit(?:\s\([^)]*\))?:\s?(.*)$/;
+  /^\S+\s\S+\s(.+?)\s<[^>]*>\s(\d+)\s([+-]\d{4})\tcommit(?:\s\([^)]*\))?:\s?(.*)$/;
 
 const EXPORT_LINE_RE =
-  /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})(?::\d{2})?(?:\s([+-]\d{4}))?\s*\|\s?(.*)$/;
+  /^(?:(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})(?::\d{2})?(?:\s([+-]\d{4}))?)(?:\s*\|\s*([^|]*?)(?:\s*\|\s*(.*))?)?$/;
 
 /** Parse the text of a `.git/logs/HEAD` reflog into commits (newest last). */
 export function parseReflog(text: string): GitCommit[] {
@@ -34,8 +36,8 @@ export function parseReflog(text: string): GitCommit[] {
   for (const line of text.split(/\r?\n/)) {
     const m = REFLOG_COMMIT_RE.exec(line);
     if (!m) continue;
-    const epochSec = Number(m[1]);
-    const tz = m[2];
+    const epochSec = Number(m[2]);
+    const tz = m[3];
     const offsetMs =
       Number(tz.slice(1, 3)) * 3600_000 + Number(tz.slice(3, 5)) * 60_000;
     const sign = tz[0] === "-" ? -1 : 1;
@@ -45,21 +47,38 @@ export function parseReflog(text: string): GitCommit[] {
     commits.push({
       date: wallDate(d),
       time: wallTime(d),
-      message: m[3].trim(),
+      author: m[1].trim() || undefined,
+      message: m[4].trim(),
     });
   }
   return commits;
 }
 
-/** Parse pasted `git log --pretty=format:"%ad|%s" --date=format:"%Y-%m-%d %H:%M"` output. */
+/**
+ * Parse pasted `git log` output. Supports both
+ * `%ad|%an|%s` (with author) and the older `%ad|%s` (without).
+ */
 export function parseGitLogExport(text: string): GitCommit[] {
   const commits: GitCommit[] = [];
   for (const line of text.split(/\r?\n/)) {
     const m = EXPORT_LINE_RE.exec(line.trim());
     if (!m) continue;
-    commits.push({ date: m[1], time: m[2], message: m[4].trim() });
+    const rest = (m[5] ?? m[4] ?? "").trim();
+    const author = m[5] !== undefined ? (m[4] ?? "").trim() || undefined : undefined;
+    if (!rest) continue;
+    commits.push({ date: m[1], time: m[2], author, message: rest });
   }
   return commits;
+}
+
+/** Unique author names in first-seen order, with per-author commit counts. */
+export function listAuthors(commits: GitCommit[]): { author: string; count: number }[] {
+  const counts = new Map<string, number>();
+  for (const c of commits) {
+    const key = c.author ?? "(tanpa nama)";
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return [...counts.entries()].map(([author, count]) => ({ author, count }));
 }
 
 /** Group commits by date: earliest commit = clock in, latest = clock out. */
