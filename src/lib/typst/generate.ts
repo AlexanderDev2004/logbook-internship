@@ -33,6 +33,25 @@ export interface TypstSettings {
   companyStampPng?: string | null;
 }
 
+/** Client-tweakable layout of the signature block (preview panel edits this). */
+export interface SignatureLayout {
+  /** Height of every signature image, in em. Default 4. */
+  sigHeightEm: number;
+  /** Height of the company stamp image, in em. Default 6. */
+  stampHeightEm: number;
+  /** Horizontal offset of the stamp from the column's left edge, in em. Default 4. */
+  stampOffsetXEm: number;
+  /** Vertical offset of the stamp from the signature baseline, in em. Default 4. */
+  stampOffsetYEm: number;
+}
+
+export const DEFAULT_SIGNATURE_LAYOUT: SignatureLayout = {
+  sigHeightEm: 4,
+  stampHeightEm: 6,
+  stampOffsetXEm: 4,
+  stampOffsetYEm: 4,
+};
+
 export interface TypstWeek {
   entries: TypstEntry[];
   signatures?: TypstSignatures;
@@ -110,9 +129,13 @@ async function resolveImageBytes(
 
 const t = (n: number) => " ".repeat(n);
 
+/** Format a layout number for Typst source (trim float noise from sliders). */
+const num = (n: number) => String(Math.round(n * 100) / 100);
+
 export async function generateLogBookTyp(
   settings: TypstSettings,
   weeks: TypstWeek[],
+  layout: SignatureLayout = DEFAULT_SIGNATURE_LAYOUT,
 ): Promise<GeneratedTyp> {
   const files: Record<string, Uint8Array> = {};
 
@@ -261,10 +284,14 @@ export async function generateLogBookTyp(
     w("      [], [], [");
     w("        Mahasiswa,");
     const paths = sigPaths[wi];
+    const sigH = num(layout.sigHeightEm);
+    const stampH = num(layout.stampHeightEm);
+    const stampX = num(layout.stampOffsetXEm);
+    const stampY = num(layout.stampOffsetYEm);
     if (paths.student) {
-      w(`        #image("${paths.student}", height: 4em)`);
+      w(`        #image("${paths.student}", height: ${sigH}em)`);
     } else {
-      w("        #v(4em)");
+      w(`        #v(${sigH}em)`);
     }
     w(`        ${esc(week.signatures?.student?.signerName || settings.studentName)}`);
     w("      ],");
@@ -272,13 +299,13 @@ export async function generateLogBookTyp(
     w("      [");
     w("        Pembimbing Lapangan,");
     if (paths.field_supervisor) {
-      w(`        #image("${paths.field_supervisor}", height: 4em)`);
+      w(`        #image("${paths.field_supervisor}", height: ${sigH}em)`);
     } else {
-      w("        #v(4em)");
+      w(`        #v(${sigH}em)`);
     }
     if (hasStamp) {
       // Stamp overlaps the signature area, like a stamped paper document.
-      w(`        #box(width: 100%, insets: (left: 4em, top: -4em))[#image("/img/stamp.png", height: 6em)]`);
+      w(`        #box(width: 100%, insets: (left: ${stampX}em, top: -${stampY}em))[#image("/img/stamp.png", height: ${stampH}em)]`);
     }
     w(
       `        ${esc(week.signatures?.field_supervisor?.signerName || settings.fieldSupervisorName)}`,
@@ -287,9 +314,9 @@ export async function generateLogBookTyp(
     w("      [], [");
     w("        Dosen Pembimbing,");
     if (paths.academic_advisor) {
-      w(`        #image("${paths.academic_advisor}", height: 4em)`);
+      w(`        #image("${paths.academic_advisor}", height: ${sigH}em)`);
     } else {
-      w("        #v(4em)");
+      w(`        #v(${sigH}em)`);
     }
     w(`        ${esc(week.signatures?.academic_advisor?.signerName || settings.academicAdvisorName)}`);
     w("      ],");

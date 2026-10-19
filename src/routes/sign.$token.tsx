@@ -12,7 +12,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { SignatureCanvas } from "@/components/SignatureCanvas";
+import { PdfPreview } from "@/components/PdfPreview";
 import { PenLine } from "lucide-react";
+import { previewWeeksPdfByToken, downloadWeeksPdfByToken } from "@/lib/typst/pdf-client";
 import { getSignRequest, signWeek } from "../server/weeks";
 
 export const Route = createFileRoute("/sign/$token")({
@@ -87,6 +89,13 @@ function SignPage() {
           </div>
         </CardHeader>
         <CardContent className="grid gap-4">
+          {data.week && (
+            <PdfPreview
+              label="PDF"
+              buildPdf={(layout) => previewWeeksPdfByToken(token, layout)}
+              downloadPdf={(layout) => downloadWeeksPdfByToken(token, layout)}
+            />
+          )}
           {setting && week && (
             <div className="rounded-md border p-3 text-sm">
               <p>
