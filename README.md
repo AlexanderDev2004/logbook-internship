@@ -15,9 +15,12 @@ service layer, **Typst (WASM)** for PDF generation, deployed via **Alchemy** to
 - **Weekly log book pages** matching the official Polinema template — header
   letterhead, student info table, activities table (Hari/Tanggal, Jam Masuk,
   Jam Pulang, Kegiatan) and the three-party signature block.
-- **AI text refinement** — one click per entry or per week; runs against any
-  OpenAI-compatible API and rewrites activities into concise professional
-  Indonesian without inventing facts. The API key stays server-side.
+- **AI text refinement** - one click per entry or per week; each user brings
+  their own API key (**Settings > AI**): OpenRouter, [OI], Claude, Groq,
+  OpenCode Zen, or any [OI]-compatible endpoint, with a model picker that loads
+  the provider's model list. The key is stored server-side and never sent to
+  the browser. A deployment-wide AI_API_KEY binding works as a fallback.
+
 - **Three-step signing** — student, field supervisor (Pembimbing Lapangan),
   academic advisor (Dosen Pembimbing). Each party signs via a private,
   single-use link; signatures are drawn in the browser and embedded into the
@@ -57,7 +60,7 @@ Polinema letterhead template. After that, the login page appears.
 
 | Variable               | Scope           | Purpose                                              |
 | ---------------------- | --------------- | ---------------------------------------------------- |
-| `AI_API_KEY`           | runtime secret  | LLM API key (server-side only, never sent to client) |
+| `AI_API_KEY`           | runtime secret  | *Optional* fallback LLM key; users normally set their own key in **Settings → AI** |
 | `AI_BASE_URL`          | runtime secret  | OpenAI-compatible endpoint, default `https://api.openai.com/v1` |
 | `AI_MODEL`             | runtime secret  | Chat model, default `gpt-4o-mini`                    |
 | `ALCHEMY_PASSWORD`     | local/CI        | Encrypts secrets stored in Alchemy state files       |

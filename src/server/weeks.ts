@@ -1,27 +1,20 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { db, bindings } from "./env";
+import { db } from "./env";
 import { entries, settings, weeks, signatures } from "./schema";
 import { eq, and, desc } from "drizzle-orm";
 import { Effect } from "effect";
-import { AiClientLayer, type AiConfig } from "../effect/ai-service";
+import { AiClientLayer } from "../effect/ai-service";
 import { refineActivity } from "../effect/refine";
 import { requireUser } from "./session";
-
-function aiConfig(): AiConfig {
-  const apiKey = bindings.AI_API_KEY as string | undefined;
-  const baseUrl = (bindings.AI_BASE_URL as string | undefined) ?? "https://api.openai.com/v1";
-  const model = (bindings.AI_MODEL as string | undefined) ?? "gpt-4o-mini";
-  if (!apiKey) throw new Error("AI_API_KEY is not configured. Set it with `npx alchemy secret` or in .dev.vars.");
-  return { apiKey, baseUrl, model };
-}
+import { resolveAiConfig } from "./settings-fns";
 
 export const refineEntryActivity = createServerFn({ method: "POST" })
   .validator(z.object({ entryId: z.string(), text: z.string().min(1).max(2000) }))
   .handler(async ({ data }) => {
     await requireUser();
     const [row] = await db().select({ partnerName: settings.partnerName }).from(settings).limit(1);
-    const layer = AiClientLayer(aiConfig());
+    const layer = AiClientLayer(await resolveAiConfig());
 
     const refined = await Effect.runPromise(
       Effect.provide(refineActivity(data.text, { partnerName: row?.partnerName }), layer),
@@ -44,7 +37,7 @@ export const refineWeekActivities = createServerFn({ method: "POST" })
       .select()
       .from(entries)
       .where(eq(entries.weekId, data.weekId));
-    const layer = AiClientLayer(aiConfig());
+    const layer = AiClientLayer(await resolveAiConfig());
 
     const refinedEntries: string[] = [];
     for (const row of rows) {

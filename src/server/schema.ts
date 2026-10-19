@@ -41,6 +41,11 @@ export const settings = sqliteTable("settings", {
   fieldSupervisorName: text("field_supervisor_name").notNull(),
   academicAdvisorName: text("academic_advisor_name").notNull(),
   studentSignaturePng: text("student_signature_png"), // base64 data url
+  // Per-user AI configuration (Settings → AI). The key is stored server-side
+  // and never returned to the client; env bindings are the fallback.
+  aiApiKey: text("ai_api_key"),
+  aiBaseUrl: text("ai_base_url"),
+  aiModel: text("ai_model"),
   updatedAt: text("updated_at").notNull(),
 });
 

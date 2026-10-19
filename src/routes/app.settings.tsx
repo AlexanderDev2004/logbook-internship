@@ -15,7 +15,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SignatureCanvas } from "@/components/SignatureCanvas";
 import { Save } from "lucide-react";
-import { getSettings, saveStudentSignature, updateSettings } from "../server/settings-fns";
+import {
+  getSettings,
+  listAiModels,
+  saveAiConfig,
+  saveStudentSignature,
+  testAiConnection,
+  updateSettings,
+} from "../server/settings-fns";
 
 export const Route = createFileRoute("/app/settings")({
   loader: () => getSettings(),
@@ -218,42 +225,190 @@ function SettingsPage() {
         </TabsContent>
 
         <TabsContent value="ai" className="pt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>AI text refinement</CardTitle>
-              <CardDescription>
-                The API key is configured server-side as a secret, never exposed to
-                the browser.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-2 text-sm">
-              <p>
-                Set these three secrets / variables on the server (Alchemy or
-                <code> .dev.vars </code> locally):
-              </p>
-              <ul className="list-disc pl-5">
-                <li>
-                  <code>AI_API_KEY</code> — your API key
-                </li>
-                <li>
-                  <code>AI_BASE_URL</code> — default{" "}
-                  <code>https://api.openai.com/v1</code> (any [OI]-compatible
-                  endpoint works: OpenRouter, Groq, …)
-                </li>
-                <li>
-                  <code>AI_MODEL</code> — default <code>gpt-4o-mini</code>
-                </li>
-              </ul>
-              <Separator className="my-2" />
-              <p className="text-muted-foreground">
-                After saving your activities, use “Refine with AI” on a week page to
-                polish every activity description into concise, professional
-                Indonesian — keeping all technical terms.
-              </p>
-            </CardContent>
-          </Card>
+          <AiSettings
+            initialBaseUrl={form.aiBaseUrl ?? ""}
+            initialModel={form.aiModel ?? ""}
+            hasKey={form.hasAiKey ?? false}
+          />
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+const AI_PRESETS: Array<{ label: string; baseUrl: string; hint: string }> = [
+  { label: "OpenRouter", baseUrl: "https://openrouter.ai/api/v1", hint: "ratusan model, satu key" },
+  { label: "OpenAI", baseUrl: "https://api.openai.com/v1", hint: "gpt-4o-mini, dst." },
+  { label: "Anthropic (Claude)", baseUrl: "https://api.anthropic.com/v1", hint: "endpoint kompatibel [OI]" },
+  { label: "Groq", baseUrl: "https://api.groq.com/openai/v1", hint: "cepat & murah" },
+  { label: "OpenCode Zen", baseUrl: "https://opencode.ai/zen/v1", hint: "gateway OpenCode" },
+  { label: "Custom", baseUrl: "", hint: "endpoint apa pun yang kompatibel [OI]" },
+];
+
+function AiSettings({
+  initialBaseUrl,
+  initialModel,
+  hasKey,
+}: {
+  initialBaseUrl: string;
+  initialModel: string;
+  hasKey: boolean;
+}) {
+  const [baseUrl, setBaseUrl] = useState(initialBaseUrl);
+  const [model, setModel] = useState(initialModel);
+  const [apiKey, setApiKey] = useState("");
+  const [keyDirty, setKeyDirty] = useState(false);
+  const [models, setModels] = useState<string[]>([]);
+  const [busy, setBusy] = useState<"" | "save" | "test" | "models">("");
+  const [status, setStatus] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+
+  const activePreset = AI_PRESETS.find((p) => p.baseUrl !== "" && p.baseUrl === baseUrl);
+  const keySet = hasKey || (keyDirty && apiKey.length > 0);
+
+  const save = async () => {
+    setBusy("save");
+    setStatus(null);
+    try {
+      await saveAiConfig({
+        data: { baseUrl, model, apiKey: keyDirty ? apiKey : "" },
+      });
+      setApiKey("");
+      setKeyDirty(false);
+      setStatus({ kind: "ok", text: "AI configuration saved." });
+    } catch (e) {
+      setStatus({ kind: "err", text: String((e as Error).message ?? e) });
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const test = async () => {
+    setBusy("test");
+    setStatus(null);
+    try {
+      const r = await testAiConnection();
+      setStatus({ kind: "ok", text: `Connected — model ${r.model} replied: “${r.sample}”` });
+    } catch (e) {
+      setStatus({ kind: "err", text: String((e as Error).message ?? e) });
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const loadModels = async () => {
+    setBusy("models");
+    setStatus(null);
+    try {
+      const r = await listAiModels();
+      setModels(r.models);
+      setStatus({ kind: "ok", text: `${r.models.length} models available.` });
+    } catch (e) {
+      setStatus({ kind: "err", text: String((e as Error).message ?? e) });
+    } finally {
+      setBusy("");
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>AI text refinement</CardTitle>
+        <CardDescription>
+          Bring your own key — OpenRouter, OpenAI, Claude, Groq, OpenCode Zen, or any
+          [OI]-compatible endpoint. The key is stored server-side and never sent to
+          the browser again.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-3">
+        <div className="flex flex-wrap gap-1.5">
+          {AI_PRESETS.map((p) => (
+            <Button
+              key={p.label}
+              type="button"
+              size="sm"
+              variant={activePreset?.label === p.label ? "default" : "outline"}
+              title={p.hint}
+              onClick={() => {
+                setBaseUrl(p.baseUrl);
+                if (p.baseUrl === "") setBaseUrl(initialBaseUrl || "https://");
+              }}
+            >
+              {p.label}
+            </Button>
+          ))}
+        </div>
+
+        <div className="grid gap-1.5">
+          <Label htmlFor="aiBaseUrl">Base URL</Label>
+          <Input
+            id="aiBaseUrl"
+            value={baseUrl}
+            onChange={(e) => setBaseUrl(e.target.value)}
+            placeholder="https://openrouter.ai/api/v1"
+          />
+        </div>
+
+        <div className="grid gap-1.5">
+          <div className="flex items-center justify-between">
+            <Label htmlFor="aiModel">Model</Label>
+            <Button type="button" size="sm" variant="ghost" onClick={loadModels} disabled={busy !== "" || !baseUrl || !keySet}>
+              {busy === "models" ? "Loading…" : "Load model list"}
+            </Button>
+          </div>
+          <Input
+            id="aiModel"
+            list="ai-model-options"
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            placeholder="anthropic/claude-haiku-4.5"
+          />
+          <datalist id="ai-model-options">
+            {models.map((m) => (
+              <option key={m} value={m} />
+            ))}
+          </datalist>
+          <p className="text-xs text-muted-foreground">
+            Type a model id, or load the list your provider offers (needs a saved key).
+          </p>
+        </div>
+
+        <div className="grid gap-1.5">
+          <Label htmlFor="aiKey">API key {keySet && <span className="text-xs text-muted-foreground">(saved)</span>}</Label>
+          <Input
+            id="aiKey"
+            type="password"
+            value={apiKey}
+            onChange={(e) => {
+              setApiKey(e.target.value);
+              setKeyDirty(true);
+            }}
+            placeholder={hasKey ? "•••••••• (saved — type to replace)" : "sk-..."}
+            autoComplete="off"
+          />
+        </div>
+
+        <div className="flex gap-2">
+          <Button onClick={save} disabled={busy !== "" || !baseUrl || !model}>
+            Save AI config
+          </Button>
+          <Button variant="outline" onClick={test} disabled={busy !== "" || !baseUrl || !model}>
+            {busy === "test" ? "Testing…" : "Test connection"}
+          </Button>
+        </div>
+
+        {status && (
+          <p className={status.kind === "ok" ? "text-sm text-green-600" : "text-sm text-destructive"}>
+            {status.text}
+          </p>
+        )}
+
+        <Separator className="my-1" />
+        <p className="text-sm text-muted-foreground">
+          After saving, use “Refine with AI” on a week page to polish every activity
+          description into concise, professional Indonesian — keeping all technical
+          terms.
+        </p>
+      </CardContent>
+    </Card>
   );
 }
