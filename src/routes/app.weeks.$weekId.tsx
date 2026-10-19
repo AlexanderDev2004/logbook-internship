@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
+﻿import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,8 +15,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Copy, FileDown, Plus, Sparkles, Trash2 } from "lucide-react";
-import { downloadWeeksPdf } from "@/lib/typst/pdf-client";
+import { downloadWeeksPdf, previewWeeksPdf } from "@/lib/typst/pdf-client";
 import { GitImport } from "@/components/GitImport";
+import { PdfPreview } from "@/components/PdfPreview";
 import { SignatureCanvas } from "@/components/SignatureCanvas";
 import {
   deleteEntry,
@@ -54,7 +55,7 @@ function WeekDetailPage() {
     return <p className="text-muted-foreground">Week not found.</p>;
   }
 
-  const locked = data.signatures.some(
+  const signedByOthers = data.signatures.some(
     (s) => s.role !== "student" && s.status === "signed",
   );
 
@@ -105,21 +106,30 @@ function WeekDetailPage() {
       <div className="flex items-center justify-between">
         <div>
           <Link to="/app/weeks" className="text-sm text-muted-foreground hover:underline">
-            ← All weeks
+            â† All weeks
           </Link>
           <h1 className="text-xl font-semibold">{data.week.label}</h1>
         </div>
-        <Button
-          variant="outline"
-          onClick={() => downloadWeeksPdf([data.week.id]).catch((e) => alert(String(e.message ?? e)))}
-        >
-          <FileDown /> Download PDF
-        </Button>
+        <div className="flex gap-2">
+          <PdfPreview
+            label="PDF"
+            buildPdf={(layout) => previewWeeksPdf([data.week.id], layout)}
+            downloadPdf={(layout) => downloadWeeksPdf([data.week.id], layout)}
+          />
+          <Button
+            variant="outline"
+            onClick={() => downloadWeeksPdf([data.week.id]).catch((e) => alert(String(e.message ?? e)))}
+          >
+            <FileDown /> Download PDF
+          </Button>
+        </div>
       </div>
 
-      {locked && (
+      {signedByOthers && (
         <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-          This week is locked — a supervisor or advisor has already signed it.
+          This week has been signed by a supervisor or advisor â€” you can still
+          edit the entries, but the signatures will stay as they are until they
+          are reset.
         </p>
       )}
 
@@ -131,7 +141,7 @@ function WeekDetailPage() {
               One row per day, exactly as they will appear in the PDF.
             </CardDescription>
           </div>
-          {data.entries.length > 0 && !locked && (
+          {data.entries.length > 0 && (
             <Button variant="secondary" size="sm" onClick={refineAll} disabled={busy}>
               <Sparkles /> Refine all with AI
             </Button>
@@ -163,7 +173,7 @@ function WeekDetailPage() {
                     )}
                   </TableCell>
                   <TableCell className="text-right">
-                    {!locked && (
+                    {(
                       <Button
                         variant="ghost"
                         size="icon"
@@ -188,7 +198,7 @@ function WeekDetailPage() {
             </TableBody>
           </Table>
 
-          {!locked && (
+          {(
             <>
               <Separator />
               <div className="grid gap-3">

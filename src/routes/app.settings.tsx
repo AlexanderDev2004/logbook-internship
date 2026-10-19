@@ -163,6 +163,41 @@ function SettingsPage() {
                 <Input id="fs" value={form.fieldSupervisorName} onChange={(e) => set("fieldSupervisorName", e.target.value)} />
               </div>
               <div className="grid gap-1.5">
+                <Label>Stempel perusahaan (opsional)</Label>
+                <p className="text-xs text-muted-foreground">
+                  PNG stempel perusahaan mitra — muncul di samping tanda tangan
+                  Pembimbing Lapangan pada PDF. Kosongkan jika tidak dipakai.
+                </p>
+                <div className="flex items-center gap-3">
+                  {form.companyStampPng && (
+                    <img
+                      src={form.companyStampPng}
+                      alt="stempel"
+                      className="h-20 rounded border bg-white object-contain p-1"
+                    />
+                  )}
+                  <input
+                    ref={stampInput}
+                    type="file"
+                    accept="image/png"
+                    className="hidden"
+                    onChange={(e) => e.target.files?.[0] && pickStamp(e.target.files[0])}
+                  />
+                  <Button variant="outline" size="sm" onClick={() => stampInput.current?.click()}>
+                    Upload stempel…
+                  </Button>
+                  {form.companyStampPng && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => set("companyStampPng", null)}
+                    >
+                      Hapus
+                    </Button>
+                  )}
+                </div>
+              </div>
+              <div className="grid gap-1.5">
                 <Label htmlFor="aa">Dosen Pembimbing (academic advisor)</Label>
                 <Input id="aa" value={form.academicAdvisorName} onChange={(e) => set("academicAdvisorName", e.target.value)} />
               </div>
@@ -254,44 +289,6 @@ function SettingsPage() {
                 <Button onClick={() => void saveSignature()} disabled={sigBusy}>
                   <Save /> {sigBusy ? "Saving…" : "Save signature"}
                 </Button>
-              </div>
-
-              <Separator className="my-2" />
-
-              <div className="grid gap-1.5">
-                <Label>Stempel perusahaan (opsional)</Label>
-                <p className="text-xs text-muted-foreground">
-                  Muncul di samping tanda tangan Pembimbing Lapangan pada PDF.
-                  Kosongkan jika tidak dipakai.
-                </p>
-                <div className="flex items-center gap-3">
-                  {form.companyStampPng && (
-                    <img
-                      src={form.companyStampPng}
-                      alt="stempel"
-                      className="h-20 rounded border bg-white object-contain p-1"
-                    />
-                  )}
-                  <input
-                    ref={stampInput}
-                    type="file"
-                    accept="image/png"
-                    className="hidden"
-                    onChange={(e) => e.target.files?.[0] && pickStamp(e.target.files[0])}
-                  />
-                  <Button variant="outline" size="sm" onClick={() => stampInput.current?.click()}>
-                    Upload stempel…
-                  </Button>
-                  {form.companyStampPng && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => set("companyStampPng", null)}
-                    >
-                      Hapus
-                    </Button>
-                  )}
-                </div>
               </div>
             </CardContent>
           </Card>

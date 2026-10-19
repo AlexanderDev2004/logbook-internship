@@ -21,6 +21,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ArrowLeft, GitBranch, Loader2 } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 import {
   groupCommitsByDate,
   listAuthors,
@@ -62,6 +63,10 @@ export function GitImport({ weekId, startDate, onImported }: GitImportProps) {
   const [authorFilter, setAuthorFilter] = useState<Set<string>>(new Set());
   const [rows, setRows] = useState<ReviewRow[]>([]);
   const [busy, setBusy] = useState(false);
+  /** Progress of the import loop: how many days have been saved so far. */
+  const [savedCount, setSavedCount] = useState(0);
+  /** Import finished successfully; dialog stays open until the user closes it. */
+  const [finished, setFinished] = useState(false);
   const folderInput = useRef<HTMLInputElement>(null);
 
   const weekEnd = weekEndDate(startDate);
@@ -75,6 +80,8 @@ export function GitImport({ weekId, startDate, onImported }: GitImportProps) {
     setAuthorFilter(new Set());
     setRows([]);
     setPasted("");
+    setSavedCount(0);
+    setFinished(false);
   };
 
   /** Step 1 done: keep the raw commits, move to the author filter. */
@@ -148,7 +155,10 @@ export function GitImport({ weekId, startDate, onImported }: GitImportProps) {
   const onImport = async () => {
     setBusy(true);
     setError(null);
+    setFinished(false);
+    setSavedCount(0);
     try {
+      let done = 0;
       for (const row of rows) {
         if (!row.include) continue;
         await saveEntry({
@@ -160,10 +170,10 @@ export function GitImport({ weekId, startDate, onImported }: GitImportProps) {
             activity: row.activity,
           },
         });
+        done += 1;
+        setSavedCount(done);
       }
-      setOpen(false);
-      reset();
-      await onImported();
+      setFinished(true);
     } catch (e) {
       setError(String((e as Error).message ?? e));
     } finally {
@@ -171,7 +181,15 @@ export function GitImport({ weekId, startDate, onImported }: GitImportProps) {
     }
   };
 
+  /** Close after a successful import: sync the week table first. */
+  const finishAndClose = async () => {
+    closeAndReset(false);
+    await onImported();
+  };
+
   const selectedCount = rows.filter((r) => r.include).length;
+  const importProgress =
+    selectedCount > 0 ? Math.round((savedCount / selectedCount) * 100) : 0;
   const filteredTotal = authors
     .filter((a) => authorFilter.has(a.author))
     .reduce((sum, a) => sum + a.count, 0);
@@ -210,9 +228,12 @@ export function GitImport({ weekId, startDate, onImported }: GitImportProps) {
 
             <TabsContent value="folder" className="grid gap-2">
               {reading ? (
-                <div className="flex items-center gap-2 rounded-md border bg-muted/40 p-3 text-sm">
-                  <Loader2 className="animate-spin" />
-                  Membaca git log, mohon tunggu…
+                <div className="grid gap-2">
+                  <div className="flex items-center gap-2 rounded-md border bg-muted/40 p-3 text-sm">
+                    <Loader2 className="animate-spin" />
+                    Membaca git log, mohon tunggu…
+                  </div>
+                  <Progress value={100} className="animate-pulse" />
                 </div>
               ) : (
                 <>
@@ -374,14 +395,43 @@ export function GitImport({ weekId, startDate, onImported }: GitImportProps) {
               </Table>
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setStep("filter")}>
+              <Button
+                variant="outline"
+                onClick={() => setStep("filter")}
+                disabled={busy || finished}
+              >
                 <ArrowLeft /> Kembali
               </Button>
-              <Button onClick={() => void onImport()} disabled={busy || selectedCount === 0}>
-                {busy ? <Loader2 className="animate-spin" /> : null}
-                Masukkan ke tabel {selectedCount > 0 ? `(${selectedCount} hari)` : ""}
-              </Button>
+              {finished ? (
+                <Button onClick={() => void finishAndClose()}>
+                  Selesai — {selectedCount} hari dimasukkan
+                </Button>
+              ) : (
+                <Button onClick={() => void onImport()} disabled={busy || selectedCount === 0}>
+                  {busy ? <Loader2 className="animate-spin" /> : null}
+                  {busy
+                    ? `Menyimpan ${savedCount}/${selectedCount}…`
+                    : `Masukkan ke tabel${selectedCount > 0 ? ` (${selectedCount} hari)` : ""}`}
+                </Button>
+              )}
             </div>
+            {(busy || finished) && (
+              <div className="grid gap-1.5">
+                <Progress value={importProgress} />
+                <p className="text-xs text-muted-foreground">
+                  {finished ? (
+                    <span className="text-green-600">
+                      ✓ Selesai — {savedCount} dari {selectedCount} hari berhasil dimasukkan ke
+                      tabel (100%)
+                    </span>
+                  ) : (
+                    <>
+                      Menyimpan aktivitas… {savedCount} dari {selectedCount} hari ({importProgress}%)
+                    </>
+                  )}
+                </p>
+              </div>
+            )}
           </div>
         )}
 

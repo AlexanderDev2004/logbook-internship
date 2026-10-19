@@ -129,7 +129,6 @@ export const saveEntry = createServerFn({ method: "POST" })
   .validator(entryInput)
   .handler(async ({ data }) => {
     await requireUser();
-    await assertWeekUnlocked(data.weekId);
     if (data.id) {
       await db()
         .update(entries)
@@ -166,18 +165,9 @@ export const deleteEntry = createServerFn({ method: "POST" })
   .validator(z.object({ id: z.string() }))
   .handler(async ({ data }) => {
     await requireUser();
-    const [row] = await db().select().from(entries).where(eq(entries.id, data.id)).limit(1);
-    if (row) await assertWeekUnlocked(row.weekId);
     await db().delete(entries).where(eq(entries.id, data.id));
     return { ok: true };
   });
-
-async function assertWeekUnlocked(weekId: string) {
-  const sigs = await db().select().from(signatures).where(eq(signatures.weekId, weekId));
-  if (sigs.filter((s) => s.role !== "student").some((s) => s.status === "signed")) {
-    throw new Error("Week is locked: it has already been signed by a supervisor or advisor.");
-  }
-}
 
 // ---------- signing ----------
 
@@ -323,5 +313,61 @@ export const resetSignature = createServerFn({ method: "POST" })
       .set({ status: "pending", signerName: null, signaturePng: null, signedAt: null })
       .where(and(eq(signatures.weekId, data.weekId), eq(signatures.role, data.role)));
     return { ok: true };
+  });
+
+// Full PDF payload for one week, authorized by a signing token.
+// Signers (advisor / field supervisor) use this to preview the exact
+// document they are about to sign, without needing a student account.
+export const getPdfDataByToken = createServerFn({ method: "POST" })
+  .validator(z.object({ token: z.string() }))
+  .handler(async ({ data }) => {
+    const [sig] = await db()
+      .select()
+      .from(signatures)
+      .where(eq(signatures.token, data.token))
+      .limit(1);
+    if (!sig) throw new Error("Invalid token");
+    const [setting] = await db().select().from(settings).limit(1);
+    if (!setting) throw new Error("Settings not found");
+    const [week] = await db().select().from(weeks).where(eq(weeks.id, sig.weekId)).limit(1);
+    if (!week) throw new Error("Week not found");
+    const rows = await db().select().from(entries).where(eq(entries.weekId, sig.weekId));
+    rows.sort((a, b) => a.entryDate.localeCompare(b.entryDate) || a.position - b.position);
+    const sigs = await db().select().from(signatures).where(eq(signatures.weekId, sig.weekId));
+    return {
+      settings: {
+        studentName: setting.studentName,
+        studentNim: setting.studentNim,
+        studyProgram: setting.studyProgram,
+        partnerName: setting.partnerName,
+        logoPng: setting.logoPng,
+        institutionLines: JSON.parse(setting.institutionLines) as string[],
+        subLines: JSON.parse(setting.subLines) as string[],
+        titleLines: JSON.parse(setting.titleLines) as string[],
+        fontHeading: setting.fontHeading as "Times New Roman" | "Calibri",
+        fontBody: setting.fontBody as "Times New Roman" | "Calibri",
+        fieldSupervisorName: setting.fieldSupervisorName,
+        academicAdvisorName: setting.academicAdvisorName,
+        studentSignaturePng: setting.studentSignaturePng,
+        companyStampPng: setting.companyStampPng,
+      },
+      weeks: [
+        {
+          label: week.label,
+          entries: rows.map((e) => ({
+            entryDate: e.entryDate,
+            clockIn: e.clockIn,
+            clockOut: e.clockOut,
+            activity: e.activity,
+          })),
+          signatures: Object.fromEntries(
+            sigs.map((s) => [
+              s.role,
+              { signerName: s.signerName, signaturePng: s.signaturePng, status: s.status },
+            ]),
+          ),
+        },
+      ],
+    };
   });
 

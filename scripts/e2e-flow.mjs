@@ -238,11 +238,10 @@ check(
   (await rpc(fnIds.signWeek, { data: { token: tokenOf("field_supervisor"), signerName: "Muhammad Ali Zulfikar", signaturePng: TINY_PNG } }))?.ok === true,
 );
 
-await expectError(
-  "entries are locked once a supervisor signed",
-  rpc(fnIds.saveEntry, { data: { weekId, entryDate: "2026-10-21", clockIn: "08:00", clockOut: "12:00", activity: "x" } }),
-  "locked",
-);
+const afterSupervisor = await rpc(fnIds.saveEntry, {
+  data: { weekId, entryDate: "2026-10-21", clockIn: "08:00", clockOut: "12:00", activity: "editable even after a supervisor signed" },
+});
+check("entries stay editable even after a supervisor signed", typeof afterSupervisor?.id === "string");
 
 await expectError(
   "student signature cannot be reset after a supervisor signed",
@@ -262,13 +261,12 @@ const pdf = await rpc(fnIds.getPdfData, { data: { weekIds: [weekId] } });
 check(
   "PDF data carries the full template payload",
   pdf?.settings?.studentNim === "2341720040" && pdf?.weeks?.length === 1 &&
-    pdf.weeks[0].entries.length === 3 &&
+    pdf.weeks[0].entries.length === 4 &&
     pdf.weeks[0].signatures.academic_advisor?.status === "signed" &&
     typeof pdf.weeks[0].signatures.academic_advisor?.signaturePng === "string" &&
     pdf.weeks[0].signatures.academic_advisor.token === undefined,
   `${pdf?.weeks?.[0]?.entries?.length} entries, 3 signatures`,
 );
-
 // unlock path (advisor also signed, so reset it too)
 check("supervisor signature resets", (await rpc(fnIds.resetSignature, { data: { weekId, role: "field_supervisor" } }))?.ok === true);
 check("advisor signature resets", (await rpc(fnIds.resetSignature, { data: { weekId, role: "academic_advisor" } }))?.ok === true);
