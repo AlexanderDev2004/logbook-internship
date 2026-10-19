@@ -4,10 +4,10 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite dev",
+    "dev": "alchemy dev --stage dev",
     "build": "vite build",
     "preview": "npm run build && vite preview",
-    "deploy": "alchemy deploy",
+    "deploy": "alchemy deploy --stage prod",
     "destroy": "alchemy destroy",
     "db:generate": "drizzle-kit generate",
     "db:local": "wrangler d1 execute logbook-db --local --file=./drizzle/init.sql",

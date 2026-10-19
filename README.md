@@ -28,50 +28,128 @@ service layer, **Typst (WASM)** for PDF generation, deployed via **Alchemy** to
 - **Customizable** — letterhead logo and lines, titles, fonts, student
   identity, supervisor names, your stored signature.
 
-## Getting started
+## Requirements
+
+- Node.js 22+
+- [pnpm](https://pnpm.io) 12 (set via `packageManager`; Alchemy requires pnpm)
+- A Cloudflare account with the `alexanderar.com` zone (for deployment only —
+  local dev also needs credentials because Alchemy creates the Worker resource
+  through the Cloudflare API even in dev mode)
+
+## Quick start
 
 ```bash
-npm install
-cp .dev.vars.example .dev.vars   # fill in AI_API_KEY etc.
-npm run dev                      # alchemy dev: provisions local D1 + vite
+pnpm install
+cp .dev.vars.example .dev.vars   # fill in AI_API_KEY (or export it instead)
+
+# authenticate Alchemy once — pick either:
+npx alchemy login                # browser device flow, stores a profile
+# ...or export CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID
+
+pnpm dev                         # alchemy dev (stage "dev"): local D1 + Vite
 ```
 
-Open http://localhost:3000, create the owner account (first run only), then:
+Open http://localhost:3000. On the first run only, the registration form
+creates the **owner account** for the instance and seeds the settings with the
+Polinema letterhead template. After that, the login page appears.
 
-1. Fill in identity + letterhead under **Settings**.
-2. Create a **week** per log book page and add daily entries.
-3. Hit **Refine with AI**, sign as the student, copy the two signing links to
-   your supervisors, and download the signed PDF.
+### Environment variables
 
-## Deployment (Cloudflare)
+| Variable               | Scope           | Purpose                                              |
+| ---------------------- | --------------- | ---------------------------------------------------- |
+| `AI_API_KEY`           | runtime secret  | LLM API key (server-side only, never sent to client) |
+| `AI_BASE_URL`          | runtime secret  | OpenAI-compatible endpoint, default `https://api.openai.com/v1` |
+| `AI_MODEL`             | runtime secret  | Chat model, default `gpt-4o-mini`                    |
+| `ALCHEMY_PASSWORD`     | local/CI        | Encrypts secrets stored in Alchemy state files       |
+| `CLOUDFLARE_API_TOKEN` | local/CI        | Cloudflare auth for `alchemy dev` / `alchemy deploy` |
+| `CLOUDFLARE_ACCOUNT_ID`| local/CI        | Cloudflare account ID                                |
 
-Requirements: a Cloudflare account with the `alexanderar.com` zone, and an API
-token with Workers + D1 + DNS permissions.
+Set runtime secrets (`AI_API_KEY`, …) for production with
+`npx alchemy secret set AI_API_KEY`, or export them in the shell before
+`pnpm deploy`.
+
+## Daily usage
+
+1. **Settings → Identity** — student name, NIM, program studi, nama mitra,
+   supervisor names. These fill every PDF.
+2. **Settings → Document** — letterhead logo, ministry/institution lines,
+   address lines, title lines, heading/body fonts.
+3. **Settings → Signature** — draw and store your own signature once; it is
+   reused on every week you sign.
+4. **Weeks** — create one week per log book page (`26_10_w3` + Monday date),
+   add daily entries, hit **Refine with AI** on single entries or the whole
+   week.
+5. **Signing** — sign as the student in-app, then copy the two signing links
+   from the week page to your field supervisor and academic advisor. They open
+   the link, review the entries, and draw their signature — no account needed.
+6. **PDF** — download a single week or export everything; the browser compiles
+   the exact Polinema layout from your data.
+
+Once a supervisor or advisor has signed, the week locks against editing. The
+owner can reset a signature to unlock (the student signature cannot be reset
+while supervisors are signed).
+
+## Architecture
+
+A short tour — full details in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+```text
+browser ──► TanStack Start routes (SSR) ──► server fns (/_serverFn/*) ──► D1 (Drizzle)
+   │                                              │
+   │                                              ├─► Effect AiClient ──► OpenAI-compatible API
+   │                                              └─► getPdfData (template payload)
+   └─► Typst WASM compiler ◄── generate.ts (Typst source) ──► signed PDF download
+```
+
+- `src/routes/*` — file-based routes: `/login`, `/app`, `/app/weeks`,
+  `/app/weeks/$weekId`, `/app/settings`, and the public `/sign/$token`.
+- `src/server/*` — server functions, Drizzle schema, PBKDF2 auth, sessions.
+  Bindings come from `cloudflare:workers` (`env.DB`, `AI_*`), so the same code
+  runs against local miniflare in dev and real D1 in production.
+- `src/effect/*` — the AI layer: `AiClient` (Effect service) + the refinement
+  prompt. Swapping providers is a config change, not a code change.
+- `src/lib/typst/*` — Typst source generation from DB rows + the WASM compile
+  step, mirroring `LogBookTemplate.typ` one-to-one.
+- `alchemy.run.ts` — infrastructure: `D1Database` (migrations from `drizzle/`)
+  and the `TanStackStart` Worker bound to `logbook.alexanderar.com`.
+
+## Testing
 
 ```bash
-npm run deploy        # = alchemy deploy
+pnpm typecheck                   # tsc --noEmit
+
+# Typst compile check: builds a sample document with the real WASM pipeline
+node --experimental-strip-types scripts/compile-check.mjs
+
+# End-to-end flow (40 checks): auth, weeks, entries, signing, lock rules, PDF
+# data, SSR pages. Requires a running dev server and a FRESH database —
+# wipe first, run, then re-register your account afterwards:
+node scripts/e2e-flow.mjs [baseUrl]   # default http://localhost:3000
 ```
 
-Alchemy provisions the D1 database, applies `drizzle/` migrations, builds the
-worker and binds the custom domain `logbook.alexanderar.com`.
+The E2E suite registers its own account (`alex@dev.test`), so run it against a
+throwaway database, not one with real data.
 
-Secrets (set as environment variables when deploying, or persist them in your
-shell profile):
+## Deployment
 
-| Variable         | Purpose                                     | Default                     |
-| ---------------- | ------------------------------------------- | --------------------------- |
-| `AI_API_KEY`     | LLM API key (server-side only)              | — (required for AI)         |
-| `AI_BASE_URL`    | OpenAI-compatible endpoint                  | `https://api.openai.com/v1` |
-| `AI_MODEL`       | Chat model                                  | `gpt-4o-mini`               |
-| `ALCHEMY_PASSWORD` | Encrypts secrets in Alchemy state files   | —                           |
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the step-by-step guide. In
+short:
 
-## Development notes
+```bash
+pnpm deploy        # alchemy deploy → D1 + Worker + custom domain
+```
 
-- `src/lib/typst/generate.ts` builds the Typst source from DB rows; it mirrors
-  `LogBookTemplate.typ` from the original folder one-to-one.
-- `scripts/compile-check.mjs` compiles a sample document in Node with the same
-  WASM pipeline the browser uses:
-  `node --experimental-strip-types scripts/compile-check.mjs`
-- Server-only code lives in `src/server/*` and reaches bindings through
-  `cloudflare:workers` (`env.DB`, `AI_*`), so it works identically in local
-  miniflare and production.
+## Troubleshooting
+
+- **`/@id/virtual:tanstack-start-dev-client-entry` returns 500** in dev — make
+  sure `@vitejs/plugin-react` is in `vite.config.ts` **after** `tanstackStart()`
+  (the router plugin must transform routes before JSX).
+- **Multiple dev servers fighting** — `alchemy dev` writes state under
+  `.alchemy/` shared by every instance on the machine. Kill stale instances
+  before starting a new one.
+- **`No credentials found` when starting dev** — run `npx alchemy login` or
+  export `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID`.
+- **A resource stuck in `creating`** (e.g. `.alchemy/logbook/<stage>/<id>.json`
+  after a crash) — delete that state file and restart; Alchemy will recreate it.
+- **`no such table` errors** — migrations did not apply; restart
+  `alchemy dev` (it applies `drizzle/` migrations on boot).
