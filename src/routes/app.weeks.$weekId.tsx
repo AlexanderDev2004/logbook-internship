@@ -21,6 +21,7 @@ import { PdfPreview } from "@/components/PdfPreview";
 import { SignatureCanvas } from "@/components/SignatureCanvas";
 import {
   deleteEntry,
+  getSignatureImages,
   getWeek,
   refineWeekActivities,
   resetSignature,
@@ -77,8 +78,12 @@ function WeekDetailPage() {
   const refineAll = async () => {
     setBusy(true);
     try {
-      await refineWeekActivities({ data: { weekId: data.week.id } });
-      await refresh();
+      const r = await refineWeekActivities({ data: { weekId: data.week.id } });
+      if (!r.ok) {
+        alert(r.error);
+      } else {
+        await refresh();
+      }
     } catch (e) {
       alert(String((e as Error).message));
     } finally {
@@ -115,6 +120,7 @@ function WeekDetailPage() {
             label="PDF"
             buildPdf={(layout) => previewWeeksPdf([data.week.id], layout)}
             downloadPdf={(layout) => downloadWeeksPdf([data.week.id], layout)}
+            loadImages={() => getSignatureImages({ data: { weekId: data.week.id } })}
           />
           <Button
             variant="outline"

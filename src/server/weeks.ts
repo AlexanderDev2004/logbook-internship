@@ -4,7 +4,7 @@ import { db } from "./env";
 import { entries, settings, weeks, signatures } from "./schema";
 import { eq, and, desc } from "drizzle-orm";
 import { Effect } from "effect";
-import { AiClientLayer } from "../effect/ai-service";
+import { AiClientLayer, describeAiError } from "../effect/ai-service";
 import { refineActivity } from "../effect/refine";
 import { requireUser } from "./session";
 import { resolveAiConfig } from "./settings-fns";
@@ -16,9 +16,20 @@ export const refineEntryActivity = createServerFn({ method: "POST" })
     const [row] = await db().select({ partnerName: settings.partnerName }).from(settings).limit(1);
     const layer = AiClientLayer(await resolveAiConfig());
 
-    const refined = await Effect.runPromise(
-      Effect.provide(refineActivity(data.text, { partnerName: row?.partnerName }), layer),
+    const out = await Effect.runPromise(
+      Effect.provide(
+        refineActivity(data.text, { partnerName: row?.partnerName }).pipe(
+          // e2e expects a thrown error here; capture inside the Effect so the
+          // message survives instead of becoming an opaque FiberFailure.
+          Effect.catchAll((e) => Effect.succeed({ __aiError: describeAiError(e) })),
+        ),
+        layer,
+      ),
     );
+    if (typeof out === "object" && out !== null && "__aiError" in out) {
+      throw new Error(out.__aiError);
+    }
+    const refined = out as string;
 
     await db()
       .update(entries)
@@ -41,15 +52,25 @@ export const refineWeekActivities = createServerFn({ method: "POST" })
 
     const refinedEntries: string[] = [];
     for (const row of rows) {
-      const program = refineActivity(row.activity, { partnerName: setting?.partnerName });
-      const refined = await Effect.runPromise(Effect.provide(program, layer));
+      const program = refineActivity(row.activity, { partnerName: setting?.partnerName }).pipe(
+        // Capture failures inside the Effect so the browser sees the provider's
+        // real reason (FiberFailure + TanStack Start would mask the message).
+        Effect.catchAll((e) => Effect.succeed({ __aiError: describeAiError(e) })),
+      );
+      const out = (await Effect.runPromise(Effect.provide(program, layer))) as
+        | string
+        | { __aiError: string };
+      if (typeof out === "object" && out !== null && "__aiError" in out) {
+        return { ok: false as const, error: out.__aiError, refined: refinedEntries.length };
+      }
+      const refined = out;
       await db()
         .update(entries)
         .set({ activity: refined, aiRefined: true })
         .where(eq(entries.id, row.id));
       refinedEntries.push(refined);
     }
-    return { count: refinedEntries.length };
+    return { ok: true as const, count: refinedEntries.length };
   });
 
 // ---------- weeks / entries CRUD ----------
@@ -313,6 +334,55 @@ export const resetSignature = createServerFn({ method: "POST" })
       .set({ status: "pending", signerName: null, signaturePng: null, signedAt: null })
       .where(and(eq(signatures.weekId, data.weekId), eq(signatures.role, data.role)));
     return { ok: true };
+  });
+
+// Signature/stamp images for the preview box-model editor (student session).
+export const getSignatureImages = createServerFn({ method: "POST" })
+  .validator(z.object({ weekId: z.string() }))
+  .handler(async ({ data }) => {
+    await requireUser();
+    const [setting] = await db()
+      .select({ studentSignaturePng: settings.studentSignaturePng, companyStampPng: settings.companyStampPng })
+      .from(settings)
+      .limit(1);
+    const sigs = await db()
+      .select({ role: signatures.role, signaturePng: signatures.signaturePng })
+      .from(signatures)
+      .where(eq(signatures.weekId, data.weekId));
+    const byRole = Object.fromEntries(sigs.map((s) => [s.role, s.signaturePng]));
+    return {
+      student: byRole.student || setting?.studentSignaturePng || null,
+      field_supervisor: byRole.field_supervisor || null,
+      academic_advisor: byRole.academic_advisor || null,
+      stamp: setting?.companyStampPng || null,
+    };
+  });
+
+// Same, authorized by a signing token so signers can preview placement too.
+export const getSignatureImagesByToken = createServerFn({ method: "POST" })
+  .validator(z.object({ token: z.string() }))
+  .handler(async ({ data }) => {
+    const [sig] = await db()
+      .select({ weekId: signatures.weekId })
+      .from(signatures)
+      .where(eq(signatures.token, data.token))
+      .limit(1);
+    if (!sig) throw new Error("Invalid token");
+    const [setting] = await db()
+      .select({ studentSignaturePng: settings.studentSignaturePng, companyStampPng: settings.companyStampPng })
+      .from(settings)
+      .limit(1);
+    const sigs = await db()
+      .select({ role: signatures.role, signaturePng: signatures.signaturePng })
+      .from(signatures)
+      .where(eq(signatures.weekId, sig.weekId));
+    const byRole = Object.fromEntries(sigs.map((s) => [s.role, s.signaturePng]));
+    return {
+      student: byRole.student || setting?.studentSignaturePng || null,
+      field_supervisor: byRole.field_supervisor || null,
+      academic_advisor: byRole.academic_advisor || null,
+      stamp: setting?.companyStampPng || null,
+    };
   });
 
 // Full PDF payload for one week, authorized by a signing token.

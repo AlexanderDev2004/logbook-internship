@@ -357,7 +357,11 @@ function AiSettings({
     setStatus(null);
     try {
       const r = await testAiConnection();
-      setStatus({ kind: "ok", text: `Connected — model ${r.model} replied: “${r.sample}”` });
+      if (r.ok) {
+        setStatus({ kind: "ok", text: `Connected — model ${r.model} replied: “${r.sample}”` });
+      } else {
+        setStatus({ kind: "err", text: r.error });
+      }
     } catch (e) {
       setStatus({ kind: "err", text: String((e as Error).message ?? e) });
     } finally {

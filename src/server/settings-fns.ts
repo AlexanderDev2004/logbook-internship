@@ -5,7 +5,7 @@ import { settings } from "./schema";
 import { eq } from "drizzle-orm";
 import { requireUser } from "./session";
 import { Effect } from "effect";
-import { AiClientLayer } from "../effect/ai-service";
+import { AiClientLayer, describeAiError } from "../effect/ai-service";
 import { refineActivity } from "../effect/refine";
 
 const stringArray = z.array(z.string().max(200)).max(10);
@@ -108,13 +108,23 @@ export const testAiConnection = createServerFn({ method: "POST" }).handler(async
   await requireUser();
   const cfg = await resolveAiConfig();
   const layer = AiClientLayer({ apiKey: cfg.apiKey, baseUrl: cfg.baseUrl, model: cfg.model });
-  const reply = await Effect.runPromise(
-    Effect.provide(
-      refineActivity("uji koneksi, balas singkat: siap", { partnerName: undefined }),
-      layer,
-    ).pipe(Effect.timeout("30 seconds")),
+  // Capture the failure INSIDE the Effect: Effect.runPromise rejects with an
+  // opaque FiberFailure, and TanStack Start's wire format then masks the
+  // message, so the browser would only see "An error has occurred".
+  const program = refineActivity("uji koneksi, balas singkat: siap", {
+    partnerName: undefined,
+  }).pipe(
+    Effect.catchAll((e) => Effect.succeed({ __aiError: describeAiError(e) })),
+    Effect.timeout("30 seconds"),
+    Effect.catchAllDefect((d) => Effect.succeed({ __aiError: String(d) })),
   );
-  return { ok: true, model: cfg.model, source: cfg.source, sample: reply.slice(0, 80) };
+  const out = (await Effect.runPromise(Effect.provide(program, layer))) as
+    | string
+    | { __aiError: string };
+  if (typeof out === "object" && out !== null && "__aiError" in out) {
+    return { ok: false as const, error: out.__aiError, model: cfg.model };
+  }
+  return { ok: true as const, model: cfg.model, source: cfg.source, sample: String(out).slice(0, 80) };
 });
 
 export const listAiModels = createServerFn({ method: "POST" }).handler(async () => {

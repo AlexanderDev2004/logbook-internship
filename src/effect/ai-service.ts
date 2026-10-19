@@ -13,6 +13,70 @@ export class AiEmptyResponse extends Data.TaggedError("AiEmptyResponse")<{}> {}
 
 export type AiError = AiRequestError | AiBadResponse | AiEmptyResponse;
 
+/** Extract the provider's own error message (e.g. FreeTierError, funds) from a body. */
+function upstreamDetail(status: number, body: string): string {
+  try {
+    const json = JSON.parse(body) as {
+      error?: { message?: string; type?: string } | string;
+      message?: string;
+    };
+    const msg =
+      (typeof json.error === "object" ? json.error?.message : json.error) ??
+      json.message;
+    if (msg) return `${msg} (HTTP ${status})`;
+  } catch {
+    // not JSON — fall through to raw body
+  }
+  return `HTTP ${status}: ${body.slice(0, 200)}`;
+}
+
+/** Walk Effect's FiberFailure wrappers to find the underlying tagged AI error. */
+function findAiError(e: unknown, depth = 0): unknown {
+  if (!e || typeof e !== "object" || depth > 6) return undefined;
+  const tag = (e as { _tag?: string })._tag;
+  if (tag === "AiBadResponse" || tag === "AiRequestError" || tag === "AiEmptyResponse") return e;
+  const obj = e as Record<string, unknown>;
+  for (const key of ["cause", "error", "defect", "failure", "previous"]) {
+    if (key in obj) {
+      const found = findAiError(obj[key], depth + 1);
+      if (found) return found;
+    }
+  }
+  return undefined;
+}
+
+/** Convert any AI failure into a readable error for the UI. */
+export function describeAiError(e: unknown): string {
+  const err = (findAiError(e) ?? e) as {
+    _tag?: string; status?: number; body?: string; cause?: unknown; message?: string;
+  } | undefined;
+  if (err && typeof err === "object") {
+    if (err._tag === "AiBadResponse" && typeof err.status === "number") {
+      return upstreamDetail(err.status, err.body ?? "");
+    }
+    if (err._tag === "AiRequestError") {
+      const cause = err.cause as { message?: string } | undefined;
+      return `Tidak bisa menghubungi server AI: ${cause?.message ?? "kesalahan jaringan"}`;
+    }
+    if (err._tag === "AiEmptyResponse") return "AI mengembalikan respons kosong.";
+  }
+  const anyErr = e as { message?: string } | undefined;
+  if (anyErr?.message && anyErr.message !== "An error has occurred") return anyErr.message;
+  // Unknown shape — dump own properties so the real cause stays visible
+  // (TanStack Start masks server-fn error details in the wire format).
+  try {
+    const props: Record<string, unknown> = {};
+    for (const k of Object.getOwnPropertyNames(anyErr ?? {})) {
+      props[k] = (anyErr as Record<string, unknown>)[k];
+    }
+    const dump = JSON.stringify(props);
+    if (dump && dump !== "{}") return dump.slice(0, 400);
+  } catch {
+    // ignore
+  }
+  return String(e);
+}
+
 export interface AiConfig {
   apiKey: string;
   baseUrl: string;

@@ -15,7 +15,7 @@ import { SignatureCanvas } from "@/components/SignatureCanvas";
 import { PdfPreview } from "@/components/PdfPreview";
 import { PenLine } from "lucide-react";
 import { previewWeeksPdfByToken, downloadWeeksPdfByToken } from "@/lib/typst/pdf-client";
-import { getSignRequest, signWeek } from "../server/weeks";
+import { getSignRequest, getSignatureImagesByToken, signWeek } from "../server/weeks";
 
 export const Route = createFileRoute("/sign/$token")({
   loader: ({ params }) => getSignRequest({ data: { token: params.token } }),
@@ -94,6 +94,7 @@ function SignPage() {
               label="PDF"
               buildPdf={(layout) => previewWeeksPdfByToken(token, layout)}
               downloadPdf={(layout) => downloadWeeksPdfByToken(token, layout)}
+              loadImages={() => getSignatureImagesByToken({ data: { token } })}
             />
           )}
           {setting && week && (
