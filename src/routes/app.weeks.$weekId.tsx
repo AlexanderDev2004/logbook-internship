@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Copy, FileDown, Plus, Sparkles, Trash2 } from "lucide-react";
 import { downloadWeeksPdf } from "@/lib/typst/pdf-client";
+import { GitImport } from "@/components/GitImport";
 import { SignatureCanvas } from "@/components/SignatureCanvas";
 import {
   deleteEntry,
@@ -229,7 +230,12 @@ function WeekDetailPage() {
                     onChange={(e) => setActivity(e.target.value)}
                   />
                 </div>
-                <div className="flex justify-end">
+                <div className="flex justify-end gap-2">
+                  <GitImport
+                    weekId={data.week.id}
+                    startDate={data.week.startDate}
+                    onImported={refresh}
+                  />
                   <Button onClick={addEntry} disabled={busy || !activity.trim()}>
                     <Plus /> Add entry
                   </Button>
