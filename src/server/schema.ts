@@ -41,6 +41,9 @@ export const settings = sqliteTable("settings", {
   fieldSupervisorName: text("field_supervisor_name").notNull(),
   academicAdvisorName: text("academic_advisor_name").notNull(),
   studentSignaturePng: text("student_signature_png"), // base64 data url
+  // Optional company stamp (base64 data url) rendered next to the field
+  // supervisor's signature block on the PDF.
+  companyStampPng: text("company_stamp_png"),
   // Per-user AI configuration (Settings → AI). The key is stored server-side
   // and never returned to the client; env bindings are the fallback.
   aiApiKey: text("ai_api_key"),

@@ -15,6 +15,13 @@
       "when": 1792395555526,
       "tag": "0001_wakeful_the_captain",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1792420988802,
+      "tag": "0002_faulty_luckman",
+      "breakpoints": true
     }
   ]
 }

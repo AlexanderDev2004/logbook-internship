@@ -29,6 +29,8 @@ export interface TypstSettings {
   fieldSupervisorName: string;
   academicAdvisorName: string;
   studentSignaturePng?: string | null;
+  /** Optional company stamp shown beside the field supervisor block. */
+  companyStampPng?: string | null;
 }
 
 export interface TypstWeek {
@@ -118,6 +120,11 @@ export async function generateLogBookTyp(
   const logoBytes = await resolveImageBytes(settings.logoPng);
   const hasLogo = logoBytes !== null;
   if (hasLogo) files["/img/logo.png"] = logoBytes!;
+
+  // Optional company stamp for the field supervisor column.
+  const stampBytes = await resolveImageBytes(settings.companyStampPng);
+  const hasStamp = stampBytes !== null;
+  if (hasStamp) files["/img/stamp.png"] = stampBytes!;
 
   // Per-week signature images (week signatures take precedence over the
   // stored student signature in settings).
@@ -249,7 +256,7 @@ export async function generateLogBookTyp(
     w("  #v(1em)");
     w("  #block(breakable: false)[");
     w("    #grid(");
-    w("      columns: (3fr, 2fr, 4fr),");
+    w("      columns: (3fr, 4fr, 3fr),");
     w("      gutter: 0pt,");
     w("      [], [], [");
     w("        Mahasiswa,");
@@ -261,13 +268,17 @@ export async function generateLogBookTyp(
     }
     w(`        ${esc(week.signatures?.student?.signerName || settings.studentName)}`);
     w("      ],");
-    w("      [], [Mengetahui,], [],");
+    w("      [Mengetahui,], [],");
     w("      [");
     w("        Pembimbing Lapangan,");
     if (paths.field_supervisor) {
       w(`        #image("${paths.field_supervisor}", height: 4em)`);
     } else {
       w("        #v(4em)");
+    }
+    if (hasStamp) {
+      // Stamp overlaps the signature area, like a stamped paper document.
+      w(`        #box(width: 100%, insets: (left: 4em, top: -4em))[#image("/img/stamp.png", height: 6em)]`);
     }
     w(
       `        ${esc(week.signatures?.field_supervisor?.signerName || settings.fieldSupervisorName)}`,

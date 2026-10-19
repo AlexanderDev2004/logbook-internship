@@ -24,6 +24,7 @@ const settingsInput = z.object({
   fieldSupervisorName: z.string().min(1).max(120),
   academicAdvisorName: z.string().min(1).max(120),
   studentSignaturePng: z.string().max(500_000).nullable(),
+  companyStampPng: z.string().max(500_000).nullable().optional(),
 });
 
 const fonts = ["Times New Roman", "Calibri"] as const;

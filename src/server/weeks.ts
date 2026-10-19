@@ -299,6 +299,7 @@ export const getPdfData = createServerFn({ method: "POST" })
         fieldSupervisorName: setting.fieldSupervisorName,
         academicAdvisorName: setting.academicAdvisorName,
         studentSignaturePng: setting.studentSignaturePng,
+        companyStampPng: setting.companyStampPng,
       },
       weeks: result,
     };

@@ -43,6 +43,13 @@ function SettingsPage() {
   );
   const [sigBusy, setSigBusy] = useState(false);
   const [sigSaved, setSigSaved] = useState(false);
+  const stampInput = useRef<HTMLInputElement | null>(null);
+
+  const pickStamp = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => set("companyStampPng", String(reader.result));
+    reader.readAsDataURL(file);
+  };
 
   if (!form) {
     return <p className="text-muted-foreground">Settings not found.</p>;
@@ -247,6 +254,44 @@ function SettingsPage() {
                 <Button onClick={() => void saveSignature()} disabled={sigBusy}>
                   <Save /> {sigBusy ? "Saving…" : "Save signature"}
                 </Button>
+              </div>
+
+              <Separator className="my-2" />
+
+              <div className="grid gap-1.5">
+                <Label>Stempel perusahaan (opsional)</Label>
+                <p className="text-xs text-muted-foreground">
+                  Muncul di samping tanda tangan Pembimbing Lapangan pada PDF.
+                  Kosongkan jika tidak dipakai.
+                </p>
+                <div className="flex items-center gap-3">
+                  {form.companyStampPng && (
+                    <img
+                      src={form.companyStampPng}
+                      alt="stempel"
+                      className="h-20 rounded border bg-white object-contain p-1"
+                    />
+                  )}
+                  <input
+                    ref={stampInput}
+                    type="file"
+                    accept="image/png"
+                    className="hidden"
+                    onChange={(e) => e.target.files?.[0] && pickStamp(e.target.files[0])}
+                  />
+                  <Button variant="outline" size="sm" onClick={() => stampInput.current?.click()}>
+                    Upload stempel…
+                  </Button>
+                  {form.companyStampPng && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => set("companyStampPng", null)}
+                    >
+                      Hapus
+                    </Button>
+                  )}
+                </div>
               </div>
             </CardContent>
           </Card>

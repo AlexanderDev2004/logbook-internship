@@ -1,0 +1,1 @@
+ALTER TABLE `settings` ADD `company_stamp_png` text;
