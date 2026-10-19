@@ -41,6 +41,8 @@ function SettingsPage() {
   const [sigPng, setSigPng] = useState<string | null>(
     data?.studentSignaturePng ?? null,
   );
+  const [sigBusy, setSigBusy] = useState(false);
+  const [sigSaved, setSigSaved] = useState(false);
 
   if (!form) {
     return <p className="text-muted-foreground">Settings not found.</p>;
@@ -79,6 +81,7 @@ function SettingsPage() {
       await updateSettings({ data: { ...form, studentSignaturePng: null } });
       if (sigPng !== (data?.studentSignaturePng ?? null)) {
         await saveStudentSignature({ data: { signaturePng: sigPng } });
+        setSigSaved(true);
       }
       setSaved(true);
       await router.invalidate();
@@ -86,6 +89,20 @@ function SettingsPage() {
       alert(String((e as Error).message));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const saveSignature = async () => {
+    setSigBusy(true);
+    setSigSaved(false);
+    try {
+      await saveStudentSignature({ data: { signaturePng: sigPng } });
+      setSigSaved(true);
+      await router.invalidate();
+    } catch (e) {
+      alert(String((e as Error).message));
+    } finally {
+      setSigBusy(false);
     }
   };
 
@@ -215,11 +232,22 @@ function SettingsPage() {
               <CardTitle>Your signature</CardTitle>
               <CardDescription>
                 Optional: reuse this signature on every week, or sign each week
-                individually from the week page.
+                individually from the week page. Draw it, then press{" "}
+                <strong>Save signature</strong> — it is only stored when you do.
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <SignatureCanvas value={sigPng} onChange={setSigPng} />
+            <CardContent className="grid gap-3">
+              <SignatureCanvas value={sigPng} onChange={(png) => { setSigPng(png); setSigSaved(false); }} />
+              <div className="flex items-center justify-end gap-3">
+                {sigSaved && (
+                  <span className="text-sm text-muted-foreground">
+                    Signature saved ✓
+                  </span>
+                )}
+                <Button onClick={() => void saveSignature()} disabled={sigBusy}>
+                  <Save /> {sigBusy ? "Saving…" : "Save signature"}
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

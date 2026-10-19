@@ -15,6 +15,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppSettingsRouteImport } from './routes/app.settings'
 import { Route as AppWeeksRouteImport } from './routes/app.weeks'
 import { Route as SignTokenRouteImport } from './routes/sign.$token'
+import { Route as AppWeeksIndexRouteImport } from './routes/app.weeks.index'
 import { Route as AppWeeksWeekIdRouteImport } from './routes/app.weeks.$weekId'
 
 const IndexRoute = IndexRouteImport.update({
@@ -47,6 +48,11 @@ const SignTokenRoute = SignTokenRouteImport.update({
   path: '/sign/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppWeeksIndexRoute = AppWeeksIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppWeeksRoute,
+} as any)
 const AppWeeksWeekIdRoute = AppWeeksWeekIdRouteImport.update({
   id: '/$weekId',
   path: '/$weekId',
@@ -61,15 +67,16 @@ export interface FileRoutesByFullPath {
   '/app/weeks': typeof AppWeeksRouteWithChildren
   '/sign/$token': typeof SignTokenRoute
   '/app/weeks/$weekId': typeof AppWeeksWeekIdRoute
+  '/app/weeks/': typeof AppWeeksIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
   '/app/settings': typeof AppSettingsRoute
-  '/app/weeks': typeof AppWeeksRouteWithChildren
   '/sign/$token': typeof SignTokenRoute
   '/app/weeks/$weekId': typeof AppWeeksWeekIdRoute
+  '/app/weeks': typeof AppWeeksIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -80,6 +87,7 @@ export interface FileRoutesById {
   '/app/weeks': typeof AppWeeksRouteWithChildren
   '/sign/$token': typeof SignTokenRoute
   '/app/weeks/$weekId': typeof AppWeeksWeekIdRoute
+  '/app/weeks/': typeof AppWeeksIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -91,15 +99,16 @@ export interface FileRouteTypes {
     | '/app/weeks'
     | '/sign/$token'
     | '/app/weeks/$weekId'
+    | '/app/weeks/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/app'
     | '/login'
     | '/app/settings'
-    | '/app/weeks'
     | '/sign/$token'
     | '/app/weeks/$weekId'
+    | '/app/weeks'
   id:
     | '__root__'
     | '/'
@@ -109,6 +118,7 @@ export interface FileRouteTypes {
     | '/app/weeks'
     | '/sign/$token'
     | '/app/weeks/$weekId'
+    | '/app/weeks/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -162,6 +172,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SignTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/app/weeks/': {
+      id: '/app/weeks/'
+      path: '/'
+      fullPath: '/app/weeks/'
+      preLoaderRoute: typeof AppWeeksIndexRouteImport
+      parentRoute: typeof AppWeeksRoute
+    }
     '/app/weeks/$weekId': {
       id: '/app/weeks/$weekId'
       path: '/$weekId'
@@ -174,10 +191,12 @@ declare module '@tanstack/react-router' {
 
 interface AppWeeksRouteChildren {
   AppWeeksWeekIdRoute: typeof AppWeeksWeekIdRoute
+  AppWeeksIndexRoute: typeof AppWeeksIndexRoute
 }
 
 const AppWeeksRouteChildren: AppWeeksRouteChildren = {
   AppWeeksWeekIdRoute: AppWeeksWeekIdRoute,
+  AppWeeksIndexRoute: AppWeeksIndexRoute,
 }
 
 const AppWeeksRouteWithChildren = AppWeeksRoute._addFileChildren(

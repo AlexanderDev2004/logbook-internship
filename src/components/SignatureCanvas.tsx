@@ -19,6 +19,10 @@ export function SignatureCanvas({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawing = useRef(false);
   const last = useRef<{ x: number; y: number } | null>(null);
+  // The data URL produced by the last self-export. The restore effect must
+  // skip it: redrawing our own export while the user is mid-stroke makes the
+  // canvas snap and offsets subsequent strokes.
+  const lastExported = useRef<string | null>(null);
   const [hasInk, setHasInk] = useState(false);
 
   const clear = useCallback(() => {
@@ -30,10 +34,12 @@ export function SignatureCanvas({
     onChange(null);
   }, [onChange]);
 
-  // Restore an existing signature image (e.g. edit mode).
+  // Restore an existing signature image (e.g. edit mode), but never redraw
+  // our own export — the canvas already shows that content.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !value) return;
+    if (value === lastExported.current) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     const img = new Image();
@@ -105,7 +111,9 @@ export function SignatureCanvas({
     out
       .getContext("2d")!
       .drawImage(canvas, minX, minY, out.width, out.height, 0, 0, out.width, out.height);
-    onChange(out.toDataURL("image/png"));
+    const url = out.toDataURL("image/png");
+    lastExported.current = url;
+    onChange(url);
   };
 
   return (
