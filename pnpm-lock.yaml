@@ -162,6 +162,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  alchemy@0.78.0: 246e76d1237c5f7d57a57209bbb91bbcc92532a31dbf06dbd179478997d4ccb5
+
 importers:
 
   .:
@@ -247,7 +250,7 @@ importers:
         version: 5.2.0(supports-color@10.2.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
       alchemy:
         specifier: ^0.78.0
-        version: 0.78.0(@cloudflare/vite-plugin@1.64.0(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))(wrangler@4.151.1(@types/node@26.6.5)))(drizzle-orm@0.44.7)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))(workerd@1.20261012.1)(wrangler@4.151.1(@types/node@26.6.5))
+        version: 0.78.0(patch_hash=246e76d1237c5f7d57a57209bbb91bbcc92532a31dbf06dbd179478997d4ccb5)(@cloudflare/vite-plugin@1.64.0(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))(wrangler@4.151.1(@types/node@26.6.5)))(drizzle-orm@0.44.7)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))(workerd@1.20261012.1)(wrangler@4.151.1(@types/node@26.6.5))
       drizzle-kit:
         specifier: ^0.31.0
         version: 0.31.11
@@ -5246,7 +5249,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  alchemy@0.78.0(@cloudflare/vite-plugin@1.64.0(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))(wrangler@4.151.1(@types/node@26.6.5)))(drizzle-orm@0.44.7)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))(workerd@1.20261012.1)(wrangler@4.151.1(@types/node@26.6.5)):
+  alchemy@0.78.0(patch_hash=246e76d1237c5f7d57a57209bbb91bbcc92532a31dbf06dbd179478997d4ccb5)(@cloudflare/vite-plugin@1.64.0(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))(wrangler@4.151.1(@types/node@26.6.5)))(drizzle-orm@0.44.7)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))(workerd@1.20261012.1)(wrangler@4.151.1(@types/node@26.6.5)):
     dependencies:
       '@aws-sdk/credential-providers': 3.1152.0
       '@cloudflare/unenv-preset': 2.7.7(unenv@2.0.0-rc.21)(workerd@1.20261012.1)

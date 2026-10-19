@@ -42,6 +42,23 @@ State lives in `.alchemy/logbook/<stage>/*.json`. It is safe to delete the
 production resources (state loss means Alchemy will create new ones, and the
 old D1 with your data is orphaned).
 
+## Patched dependency
+
+`patches/alchemy@0.78.0.patch` fixes a bug in Alchemy 0.78.0's Cloudflare API
+client: when a request passed extra headers (which D1 create/update always
+does), the default `Content-Type: application/json` header was dropped, so
+Cloudflare saw an empty body and D1 creation failed with
+`7400: Invalid property: name => Required`. The patch merges the extra
+headers into the defaults instead of replacing them (in both `src/` and
+`lib/` â€” Node runs the compiled `lib/`). pnpm applies it automatically on
+`pnpm install`. If you upgrade Alchemy, first check whether the fix landed
+upstream and delete the patch if so.
+
+The Typst compiler WASM (~27 MB) exceeds Cloudflare's 25 MB per-file static
+asset limit, so it is loaded at runtime from a pinned jsDelivr URL of the
+same package version instead of being bundled
+(see `src/lib/typst/compile.ts`).
+
 ## First deploy
 
 ```bash

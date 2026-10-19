@@ -1,0 +1,40 @@
+diff --git a/lib/cloudflare/api.js b/lib/cloudflare/api.js
+index a5efe2bc3d3c348bebe4f41716cc5fad0ebd9f4e..8662f29b4372b7860117f0fbe2a821eb99768c3e 100644
+--- a/lib/cloudflare/api.js
++++ b/lib/cloudflare/api.js
+@@ -117,7 +117,14 @@ export class CloudflareApi {
+             });
+         }
+         else if (init.headers) {
+-            headers = init.headers;
++            headers = {
++                ...headers,
++                ...(init.headers instanceof Headers
++                    ? Object.fromEntries(init.headers.entries())
++                    : Array.isArray(init.headers)
++                        ? Object.fromEntries(init.headers)
++                        : init.headers),
++            };
+         }
+         headers = {
+             ...(await CloudflareAuth.formatHeadersWithRefresh({
+diff --git a/src/cloudflare/api.ts b/src/cloudflare/api.ts
+index fa78645b8413d2e8751a24453bf9b81499946707..1ddb11e52ff0ebdc4a3373778175822a1dd61e0a 100644
+--- a/src/cloudflare/api.ts
++++ b/src/cloudflare/api.ts
+@@ -184,7 +184,14 @@ export class CloudflareApi {
+         headers[key] = value;
+       });
+     } else if (init.headers) {
+-      headers = init.headers;
++      headers = {
++        ...headers,
++        ...(init.headers instanceof Headers
++          ? Object.fromEntries(init.headers.entries())
++          : Array.isArray(init.headers)
++            ? Object.fromEntries(init.headers)
++            : init.headers),
++      };
+     }
+     headers = {
+       ...(await CloudflareAuth.formatHeadersWithRefresh({

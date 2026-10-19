@@ -1,3 +1,5 @@
 allowBuilds:
   esbuild: true
   workerd: true
+patchedDependencies:
+  alchemy@0.78.0: patches/alchemy@0.78.0.patch
