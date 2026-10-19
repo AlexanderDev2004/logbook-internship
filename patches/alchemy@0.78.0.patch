@@ -18,6 +18,25 @@ index a5efe2bc3d3c348bebe4f41716cc5fad0ebd9f4e..8662f29b4372b7860117f0fbe2a821eb
          }
          headers = {
              ...(await CloudflareAuth.formatHeadersWithRefresh({
+diff --git a/lib/cloudflare/d1-database.js b/lib/cloudflare/d1-database.js
+index 79f803a9f2db16f64acb3405047aa98354944896..9b7846764d41f0f2d19068c88eb993f1d8fb7c55 100644
+--- a/lib/cloudflare/d1-database.js
++++ b/lib/cloudflare/d1-database.js
+@@ -199,8 +199,12 @@ const _D1Database = Resource("cloudflare::D1Database", async function (id, props
+             (this.output?.jurisdiction ?? "default")) {
+             throw new Error(`Cannot update jurisdiction from '${this.output.jurisdiction}' to '${props.jurisdiction}' after database creation.`);
+         }
+-        // Update the database with new properties
+-        dbData = await updateDatabase(api, this.output.id, props);
++        // Update the database with new properties. The D1 PATCH endpoint only
++        // accepts API tokens (OAuth tokens from `wrangler login` are rejected),
++        // so skip the call entirely when there is nothing to change.
++        dbData = props.readReplication
++          ? await updateDatabase(api, this.output.id, props)
++          : { result: { uuid: this.output.id } };
+     }
+     else {
+         // If no ID exists, fall back to creating a new database
 diff --git a/src/cloudflare/api.ts b/src/cloudflare/api.ts
 index fa78645b8413d2e8751a24453bf9b81499946707..1ddb11e52ff0ebdc4a3373778175822a1dd61e0a 100644
 --- a/src/cloudflare/api.ts
@@ -38,3 +57,22 @@ index fa78645b8413d2e8751a24453bf9b81499946707..1ddb11e52ff0ebdc4a3373778175822a
      }
      headers = {
        ...(await CloudflareAuth.formatHeadersWithRefresh({
+diff --git a/src/cloudflare/d1-database.ts b/src/cloudflare/d1-database.ts
+index 672ff62a8377ea05f3c4d4900d153daef9514cf8..17d0215971f2d90200aaf8ca9a4cda745318b55d 100644
+--- a/src/cloudflare/d1-database.ts
++++ b/src/cloudflare/d1-database.ts
+@@ -394,8 +394,12 @@ const _D1Database = Resource(
+           `Cannot update jurisdiction from '${this.output.jurisdiction}' to '${props.jurisdiction}' after database creation.`,
+         );
+       }
+-      // Update the database with new properties
+-      dbData = await updateDatabase(api, this.output.id, props);
++      // Update the database with new properties. The D1 PATCH endpoint only
++      // accepts API tokens (OAuth tokens from `wrangler login` are rejected),
++      // so skip the call entirely when there is nothing to change.
++      dbData = props.readReplication
++        ? await updateDatabase(api, this.output.id, props)
++        : ({ result: { uuid: this.output.id } } as CloudflareD1Response);
+     } else {
+       // If no ID exists, fall back to creating a new database
+       dbData = await createDatabase(api, databaseName, props);
