@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { hasAccount, getSessionUser, login, register } from "../server/auth";
+import { hasAccount, getSessionUser, login, register, resetPassword } from "../server/auth";
 
 interface RegisterFields {
   name: string;
@@ -39,7 +39,7 @@ function LoginPage() {
   const [mode, setMode] = useState<"login" | "register">(
     exists ? "login" : "register",
   );
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [reg, setReg] = useState<RegisterFields>({
     name: "",
@@ -52,6 +52,8 @@ function LoginPage() {
   });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetMessage, setResetMessage] = useState<string | null>(null);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,13 +61,31 @@ function LoginPage() {
     setError(null);
     try {
       if (mode === "login") {
-        await login({ data: { email, password } });
+        await login({ data: { identifier, password } });
       } else {
         await register({
-          data: { email, password, ...reg },
+          data: { email: identifier, password, ...reg },
         });
       }
       await navigate({ to: "/app/weeks" });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submitReset = async () => {
+    setBusy(true);
+    setError(null);
+    setResetMessage(null);
+    try {
+      const res = await resetPassword({ data: { identifier } });
+      setResetMessage(
+        `Password berhasil direset. Sekarang login dengan NIM ${res.nim} sebagai password.`,
+      );
+      setPassword("");
+      setResetOpen(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -115,30 +135,75 @@ function LoginPage() {
               </>
             )}
             <div className="grid gap-1.5">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">{mode === "login" ? "Email atau NIM" : "Email"}</Label>
               <Input
                 id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                type="text"
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
                 required
               />
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="password">Password (min. 8 characters)</Label>
+              <Label htmlFor="password">
+                {mode === "login" ? "Password" : "Password (min. 8 characters)"}
+              </Label>
               <Input
                 id="password"
                 type="password"
-                minLength={8}
+                minLength={mode === "register" ? 8 : undefined}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
               />
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
+            {resetMessage && <p className="text-sm text-green-600">{resetMessage}</p>}
             <Button type="submit" disabled={busy}>
               {busy ? "…" : mode === "login" ? "Sign in" : "Create account"}
             </Button>
+            {mode === "login" && (
+              <div className="rounded-md border bg-muted/40 p-3 text-sm">
+                {resetOpen ? (
+                  <div className="grid gap-2">
+                    <p>
+                      Reset password untuk{" "}
+                      <span className="font-medium">{identifier || "(isi email/NIM dulu)"}</span>?
+                      Password akan diubah menjadi NIM kamu yang terdaftar.
+                    </p>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        disabled={busy || !identifier.trim()}
+                        onClick={submitReset}
+                      >
+                        Ya, reset password
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={busy}
+                        onClick={() => setResetOpen(false)}
+                      >
+                        Batal
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="underline"
+                    disabled={busy}
+                    onClick={() => setResetOpen(true)}
+                  >
+                    Lupa password?
+                  </button>
+                )}
+              </div>
+            )}
             {exists && (
               <p className="text-center text-sm text-muted-foreground">
                 Already have an account?{" "}

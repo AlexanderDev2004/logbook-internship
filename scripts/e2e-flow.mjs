@@ -1,4 +1,4 @@
-// End-to-end flow test against a running dev server (`npx alchemy dev`).
+﻿// End-to-end flow test against a running dev server (`npx alchemy dev`).
 // Drives the real TanStack Start server-function protocol (seroval + /_serverFn/)
 // using the app's own client RPC layer, so it exercises auth, D1, signing, and
 // PDF data exactly like a browser would.
@@ -55,10 +55,10 @@ for (const mod of ["auth", "weeks", "settings-fns"]) {
 
 const check = (label, cond, extra = "") => {
   if (cond) {
-    console.log(`PASS  ${label}${extra ? ` — ${extra}` : ""}`);
+    console.log(`PASS  ${label}${extra ? ` â€” ${extra}` : ""}`);
   } else {
     failures++;
-    console.log(`FAIL  ${label}${extra ? ` — ${extra}` : ""}`);
+    console.log(`FAIL  ${label}${extra ? ` â€” ${extra}` : ""}`);
   }
 };
 
@@ -78,6 +78,7 @@ const TINY_PNG =
 
 const EMAIL = "alex@dev.test";
 const PASSWORD = "devpassword1";
+const NIM = "2341720040";
 
 // ---------- auth ----------
 check("hasAccount is false initially", (await rpc(fnIds.hasAccount)) === false);
@@ -121,8 +122,23 @@ await expectError(
 const user = await rpc(fnIds.getSessionUser);
 check("session resolves the registered user", user?.email === EMAIL, JSON.stringify(user?.email));
 
-await expectError("login rejects a wrong password", rpc(fnIds.login, { data: { email: EMAIL, password: "wrongpass1" } }));
-check("login succeeds", (await rpc(fnIds.login, { data: { email: EMAIL, password: PASSWORD } }))?.ok === true);
+await expectError("login rejects a wrong password", rpc(fnIds.login, { data: { identifier: EMAIL, password: "wrongpass1" } }));
+check("login succeeds", (await rpc(fnIds.login, { data: { identifier: EMAIL, password: PASSWORD } }))?.ok === true);
+check(
+  "login succeeds with the NIM as identifier",
+  (await rpc(fnIds.login, { data: { identifier: "2341720040", password: PASSWORD } }))?.ok === true,
+);
+await expectError("login rejects an unknown NIM", rpc(fnIds.login, { data: { identifier: "9999999999", password: PASSWORD } }));
+const reset = await rpc(fnIds.resetPassword, { data: { identifier: EMAIL } });
+check("resetPassword returns the NIM as the new password", reset?.nim === "2341720040", JSON.stringify(reset));
+check(
+  "login with the NIM as password after reset",
+  (await rpc(fnIds.login, { data: { identifier: "2341720040", password: "2341720040" } }))?.ok === true,
+);
+await expectError("resetPassword rejects an unknown identifier", rpc(fnIds.resetPassword, { data: { identifier: "nope@x.test" } }));
+// Restore the original password for the rest of the suite.
+await rpc(fnIds.resetPassword, { data: { identifier: "2341720040" } });
+check("login succeeds with NIM as identifier and password", (await rpc(fnIds.login, { data: { identifier: EMAIL, password: "2341720040" } }))?.ok === true);
 
 // ---------- settings ----------
 const settings = await rpc(fnIds.getSettings);
@@ -147,7 +163,7 @@ await expectError("listWeeks requires a session", rpc(fnIds.listWeeks));
 const restored = await rpc(fnIds.getSessionUser);
 check("no session without cookie", restored === null);
 // restore
-await rpc(fnIds.login, { data: { email: EMAIL, password: PASSWORD } });
+await rpc(fnIds.login, { data: { identifier: EMAIL, password: NIM } });
 
 // ---------- weeks & entries ----------
 check("weeks list starts empty", (await rpc(fnIds.listWeeks)).weeks.length === 0);
@@ -188,7 +204,7 @@ check(
   `count ${week?.entries?.length}`,
 );
 
-// ---------- AI refine (dev key is a placeholder → must fail gracefully) ----------
+// ---------- AI refine (dev key is a placeholder â†’ must fail gracefully) ----------
 await expectError(
   "AI refine fails gracefully with a placeholder key",
   rpc(fnIds.refineEntryActivity, { data: { entryId: e1.id, text: "deploy worker" } }),
@@ -272,7 +288,7 @@ check(
 
 // ---------- SSR pages with the session ----------
 cookie = null;
-await rpc(fnIds.login, { data: { email: EMAIL, password: PASSWORD } });
+await rpc(fnIds.login, { data: { identifier: EMAIL, password: NIM } });
 for (const path of ["/app", "/app/weeks", `/app/weeks/${weekId}`, "/app/settings"]) {
   const res = await fetchWithSession(`${BASE}${path}`, { headers: { accept: "text/html" } });
   const html = await res.text();

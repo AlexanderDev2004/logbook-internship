@@ -18,11 +18,38 @@ export const hasAccount = createServerFn({ method: "GET" }).handler(async () => 
   return n > 0;
 });
 
-const credentials = z.object({ email: z.string().email(), password: z.string().min(8).max(200) });
+const credentials = z.object({ identifier: z.string().min(1).max(200), password: z.string().min(1).max(200) });
+
+// Resolve the account from an email address or a student NIM. Email lookups go
+// through users.email; a NIM is matched against the seeded settings row, and
+// the owner account is the only user on the instance (register enforces that).
+async function resolveUserByIdentifier(identifier: string) {
+  const ident = identifier.trim();
+  if (ident.includes("@")) {
+    const [user] = await db()
+      .select()
+      .from(users)
+      .where(eq(users.email, ident.toLowerCase()))
+      .limit(1);
+    return user ?? null;
+  }
+  const [matched] = await db()
+    .select({ n: sql<number>`count(*)` })
+    .from(settings)
+    .where(eq(settings.studentNim, ident));
+  if (!matched || matched.n === 0) return null;
+  const [user] = await db().select().from(users).limit(1);
+  return user ?? null;
+}
 
 export const register = createServerFn({ method: "POST" })
   .validator(
-    credentials.extend({
+    z
+      .object({
+        email: z.string().email(),
+        password: z.string().min(8).max(200),
+      })
+      .extend({
       name: z.string().min(1).max(120),
       studentName: z.string().min(1),
       studentNim: z.string().min(1),
@@ -85,20 +112,39 @@ export const register = createServerFn({ method: "POST" })
 export const login = createServerFn({ method: "POST" })
   .validator(credentials)
   .handler(async ({ data }) => {
-    const [user] = await db()
-      .select()
-      .from(users)
-      .where(eq(users.email, data.email.toLowerCase()))
-      .limit(1);
-    if (!user) throw new Error("Invalid email or password.");
+    const user = await resolveUserByIdentifier(data.identifier);
+    if (!user) throw new Error("Invalid email/NIM or password.");
     const hash = await hashPassword(data.password, user.salt);
     if (!constantTimeEqual(hash, user.passwordHash)) {
-      throw new Error("Invalid email or password.");
+      throw new Error("Invalid email/NIM or password.");
     }
     const token = await createSession(user.id);
     const { setResponseHeader } = await import("@tanstack/react-start/server");
     setResponseHeader("set-cookie", sessionCookieValue(token));
     return { ok: true };
+  });
+
+// Self-service reset for the single-owner instance: after confirming in the UI,
+// the password is set back to the student NIM on record. The new password is
+// returned so the login page can show it once.
+export const resetPassword = createServerFn({ method: "POST" })
+  .validator(z.object({ identifier: z.string().min(1).max(200) }))
+  .handler(async ({ data }) => {
+    const user = await resolveUserByIdentifier(data.identifier);
+    if (!user) throw new Error("No account found for that email or NIM.");
+    const [s] = await db().select().from(settings).limit(1);
+    const nim = s?.studentNim?.trim();
+    if (!nim) throw new Error("No NIM is on record; password cannot be reset.");
+    const salt = randomToken(16);
+    const passwordHash = await hashPassword(nim, salt);
+    await db()
+      .update(users)
+      .set({ passwordHash, salt })
+      .where(eq(users.id, user.id));
+    await destroySession();
+    const { setResponseHeader } = await import("@tanstack/react-start/server");
+    setResponseHeader("set-cookie", clearedSessionCookieValue());
+    return { ok: true, nim };
   });
 
 export const logout = createServerFn({ method: "POST" }).handler(async () => {
