@@ -1,0 +1,12 @@
+# Copy to .dev.vars (or export these when running `alchemy dev`).
+# Any [OI]-compatible chat completions endpoint works.
+AI_API_KEY=sk-...
+AI_BASE_URL=https://api.openai.com/v1
+AI_MODEL=gpt-4o-mini
+
+# Alchemy: encrypts secrets in local state (.alchemy/)
+ALCHEMY_PASSWORD=choose-a-passphrase
+
+# Cloudflare deploy credentials (for `alchemy deploy`)
+CLOUDFLARE_API_TOKEN=
+CLOUDFLARE_ACCOUNT_ID=
