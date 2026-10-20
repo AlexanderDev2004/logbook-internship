@@ -17,7 +17,7 @@ import {
   type SignatureLayout,
 } from "@/lib/typst/generate";
 
-const LAYOUT_KEY = "logbook:signatureLayout:v2";
+const LAYOUT_KEY = "logbook:signatureLayout:v3";
 
 export function readSignatureLayout(): SignatureLayout {
   try {
@@ -57,27 +57,38 @@ interface PdfPreviewProps {
 
 // Visual scale of the box-model editor: pixels per em.
 const PX_PER_EM = 11;
+// Editor origin inside each column so negative offsets stay visible.
+const ORIGIN_X = 6;
+const ORIGIN_Y = 56;
 // Drag range clamps (em).
 const X_MIN = -4, X_MAX = 16, Y_MIN = -8, Y_MAX = 12;
+// Scale / rotation clamps.
+const SCALE_MIN = 0.3, SCALE_MAX = 3;
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
+const round = (v: number, step: number) => Number((Math.round(v / step) * step).toFixed(6));
 
-interface DragTarget {
-  /** Which layout offset pair this box controls. */
-  keyX: keyof SignatureLayout;
-  keyY: keyof SignatureLayout;
-}
+// Base box sizes in editor px (at scale 1). Signature images are 4em tall
+// (44px), the stamp is 6em (66px); widths approximate a real signature.
+const BASE_SIZE: Record<string, { w: number; h: number }> = {
+  student: { w: 110, h: 44 },
+  field: { w: 110, h: 44 },
+  advisor: { w: 110, h: 44 },
+  stamp: { w: 66, h: 66 },
+};
 
 const ELEMENTS: Array<{
   role: string;
   label: string;
   keyX: keyof SignatureLayout;
   keyY: keyof SignatureLayout;
+  keyScale: keyof SignatureLayout;
+  keyRot: keyof SignatureLayout;
   imageKey?: keyof SignatureImages;
 }> = [
-  { role: "student", label: "Mahasiswa", keyX: "studentOffsetXEm", keyY: "studentOffsetYEm", imageKey: "student" },
-  { role: "field", label: "Pembimbing Lapangan", keyX: "fieldOffsetXEm", keyY: "fieldOffsetYEm", imageKey: "field_supervisor" },
-  { role: "stamp", label: "Stempel", keyX: "stampOffsetXEm", keyY: "stampOffsetYEm", imageKey: "stamp" },
-  { role: "advisor", label: "Dosen Pembimbing", keyX: "advisorOffsetXEm", keyY: "advisorOffsetYEm", imageKey: "academic_advisor" },
+  { role: "student", label: "Mahasiswa", keyX: "studentOffsetXEm", keyY: "studentOffsetYEm", keyScale: "studentScale", keyRot: "studentRot", imageKey: "student" },
+  { role: "field", label: "Pembimbing Lapangan", keyX: "fieldOffsetXEm", keyY: "fieldOffsetYEm", keyScale: "fieldScale", keyRot: "fieldRot", imageKey: "field_supervisor" },
+  { role: "stamp", label: "Stempel", keyX: "stampOffsetXEm", keyY: "stampOffsetYEm", keyScale: "stampScale", keyRot: "stampRot", imageKey: "stamp" },
+  { role: "advisor", label: "Dosen Pembimbing", keyX: "advisorOffsetXEm", keyY: "advisorOffsetYEm", keyScale: "advisorScale", keyRot: "advisorRot", imageKey: "academic_advisor" },
 ];
 
 /**
@@ -173,8 +184,9 @@ export function PdfPreview({ buildPdf, downloadPdf, loadImages, label }: PdfPrev
         <DialogHeader>
           <DialogTitle>Preview PDF</DialogTitle>
           <DialogDescription>
-            Tarik kotak tanda tangan / stempel untuk memindahkannya (box modeling),
-            lalu unduh saat sudah pas. Pengaturan tersimpan otomatis.
+            Tarik kotak untuk memindah, titik biru untuk resize, titik hijau untuk
+            memutar (Shift = snap 15°). Unduh saat sudah pas — pengaturan tersimpan
+            otomatis.
           </DialogDescription>
         </DialogHeader>
         <div className="flex min-h-0 flex-1 gap-4">
@@ -260,22 +272,22 @@ function BoxModelEditor({
     <div className="space-y-2">
       <Label className="flex items-center gap-1.5">
         <GripHorizontal className="size-3.5 text-muted-foreground" />
-        Posisi manual — tarik kotak
+        Posisi manual — geser, resize, rotasi
       </Label>
       <div className="grid grid-cols-[3fr_4fr_3fr] gap-px overflow-hidden rounded-md border bg-muted">
         {/* Left column: student */}
-        <div className="relative h-44 bg-background">
+        <div className="relative h-60 bg-background">
           <DragBox element={ELEMENTS[0]!} layout={layout} images={images} onLayoutChange={onLayoutChange} />
           <span className="pointer-events-none absolute bottom-1 left-1 text-[10px] text-muted-foreground">Mahasiswa</span>
         </div>
         {/* Middle column: field supervisor + stamp */}
-        <div className="relative h-44 bg-background">
+        <div className="relative h-60 bg-background">
           <DragBox element={ELEMENTS[1]!} layout={layout} images={images} onLayoutChange={onLayoutChange} />
           <DragBox element={ELEMENTS[2]!} layout={layout} images={images} onLayoutChange={onLayoutChange} />
           <span className="pointer-events-none absolute bottom-1 left-1 text-[10px] text-muted-foreground">Pembimbing Lapangan</span>
         </div>
         {/* Right column: academic advisor */}
-        <div className="relative h-44 bg-background">
+        <div className="relative h-60 bg-background">
           <DragBox element={ELEMENTS[3]!} layout={layout} images={images} onLayoutChange={onLayoutChange} />
           <span className="pointer-events-none absolute bottom-1 left-1 text-[10px] text-muted-foreground">Dosen Pembimbing</span>
         </div>
@@ -295,31 +307,99 @@ function DragBox({
   images: SignatureImages | null;
   onLayoutChange: (layout: SignatureLayout) => void;
 }) {
-  const boxRef = useRef<HTMLDivElement>(null);
-  const dragState = useRef<{ startX: number; startY: number; baseX: number; baseY: number } | null>(null);
+  // Session state for the active pointer gesture (PeakU pattern):
+  // one transform model — offset for drag, radial distance for resize,
+  // atan2 for rotate.
+  const session = useRef<{
+    mode: "drag" | "resize" | "rotate";
+    startX: number;
+    startY: number;
+    baseX: number;
+    baseY: number;
+    baseScale: number;
+    baseRot: number;
+    center: { cx: number; cy: number };
+    startDist: number;
+    startAngle: number;
+  } | null>(null);
 
   const x = layout[element.keyX] as number;
   const y = layout[element.keyY] as number;
+  const scale = layout[element.keyScale] as number;
+  const rot = layout[element.keyRot] as number;
   const src = element.imageKey ? (images?.[element.imageKey] ?? null) : null;
+  const base = BASE_SIZE[element.role]!;
+  const w = base.w * scale;
+  const h = base.h * scale;
 
-  const onPointerDown = (e: React.PointerEvent) => {
-    e.preventDefault();
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    dragState.current = { startX: e.clientX, startY: e.clientY, baseX: x, baseY: y };
+  const set = (nx: number, ny: number, nscale: number, nrot: number) => {
+    onLayoutChange({
+      ...layout,
+      [element.keyX]: round(clamp(nx, X_MIN, X_MAX), 0.25),
+      [element.keyY]: round(clamp(ny, Y_MIN, Y_MAX), 0.25),
+      [element.keyScale]: round(clamp(nscale, SCALE_MIN, SCALE_MAX), 0.05),
+      [element.keyRot]: round(clamp(nrot, -180, 180), 1),
+    });
   };
 
-  const onPointerMove = (e: React.PointerEvent) => {
-    const st = dragState.current;
-    if (!st) return;
-    const nx = clamp(Math.round((st.baseX + (e.clientX - st.startX) / PX_PER_EM) * 4) / 4, X_MIN, X_MAX);
-    const ny = clamp(Math.round((st.baseY + (e.clientY - st.startY) / PX_PER_EM) * 4) / 4, Y_MIN, Y_MAX);
-    if (nx !== layout[element.keyX] || ny !== layout[element.keyY]) {
-      onLayoutChange({ ...layout, [element.keyX]: nx, [element.keyY]: ny });
+  const boxRef = useRef<HTMLDivElement>(null);
+
+  const begin = (e: React.PointerEvent, mode: "drag" | "resize" | "rotate") => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Capture only works for a real active pointer; synthetic events (tests)
+    // have none, and losing capture just means move events must stay on the
+    // element — acceptable degradation.
+    try {
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    } catch {
+      // no active pointer — ignore
+    }
+    // Resize/rotate pivot around the BOX center, not the handle center.
+    const rect = boxRef.current!.getBoundingClientRect();
+    session.current = {
+      mode,
+      startX: e.clientX,
+      startY: e.clientY,
+      baseX: x,
+      baseY: y,
+      baseScale: scale,
+      baseRot: rot,
+      center: { cx: rect.left + rect.width / 2, cy: rect.top + rect.height / 2 },
+      startDist: 1,
+      startAngle: 0,
+    };
+    if (mode === "resize") {
+      session.current.startDist = Math.max(8, Math.hypot(e.clientX - session.current.center.cx, e.clientY - session.current.center.cy));
+    } else if (mode === "rotate") {
+      const c = session.current.center;
+      session.current.startAngle = (Math.atan2(e.clientY - c.cy, e.clientX - c.cx) * 180) / Math.PI;
     }
   };
 
-  const onPointerUp = () => {
-    dragState.current = null;
+  const move = (e: React.PointerEvent) => {
+    const st = session.current;
+    if (!st) return;
+    if (st.mode === "drag") {
+      set(
+        st.baseX + (e.clientX - st.startX) / PX_PER_EM,
+        st.baseY + (e.clientY - st.startY) / PX_PER_EM,
+        st.baseScale,
+        st.baseRot,
+      );
+    } else if (st.mode === "resize") {
+      const dist = Math.hypot(e.clientX - st.center.cx, e.clientY - st.center.cy);
+      set(st.baseX, st.baseY, st.baseScale * (dist / st.startDist), st.baseRot);
+    } else {
+      const c = st.center;
+      const ang = (Math.atan2(e.clientY - c.cy, e.clientX - c.cx) * 180) / Math.PI;
+      const next = st.baseRot + (ang - st.startAngle);
+      set(st.baseX, st.baseY, st.baseScale, e.shiftKey ? Math.round(next / 15) * 15 : next);
+    }
+  };
+
+  const end = () => {
+    session.current = null;
   };
 
   return (
@@ -327,21 +407,47 @@ function DragBox({
       ref={boxRef}
       role="button"
       aria-label={`Geser ${element.label}`}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      className={`absolute flex cursor-grab touch-none select-none items-center justify-center rounded border border-dashed border-primary/60 bg-primary/5 p-0.5 active:cursor-grabbing ${
+      onPointerDown={(e) => begin(e, "drag")}
+      onPointerMove={move}
+      onPointerUp={end}
+      onPointerCancel={end}
+      className={`absolute cursor-grab touch-none select-none rounded border border-dashed border-primary/60 bg-primary/5 hover:outline hover:outline-1 hover:outline-blue-500/80 active:cursor-grabbing ${
         element.role === "stamp" ? "z-10 border-solid border-primary" : ""
       }`}
-      style={{ left: x * PX_PER_EM, top: y * PX_PER_EM }}
+      style={{ left: x * PX_PER_EM + ORIGIN_X, top: y * PX_PER_EM + ORIGIN_Y, width: w, height: h }}
     >
-      {src ? (
-        <img src={src} alt={element.label} className="pointer-events-none h-10 object-contain opacity-80" />
-      ) : (
-        <span className="pointer-events-none px-1 text-[10px] leading-tight text-muted-foreground">
-          {element.label}
-        </span>
-      )}
+      {/* content rotates/scales with the layout; handles stay axis-aligned */}
+      <div
+        className="pointer-events-none flex size-full items-center justify-center"
+        style={{ transform: `rotate(${rot}deg)` }}
+      >
+        {src ? (
+          <img src={src} alt={element.label} className="size-full object-contain opacity-80" />
+        ) : (
+          <span className="px-1 text-[10px] leading-tight text-muted-foreground">
+            {element.label}
+          </span>
+        )}
+      </div>
+      {/* resize handle: bottom-right */}
+      <div
+        aria-label={`Resize ${element.label}`}
+        onPointerDown={(e) => begin(e, "resize")}
+        onPointerMove={move}
+        onPointerUp={end}
+        onPointerCancel={end}
+        className="absolute -bottom-1.5 -right-1.5 size-3.5 cursor-nwse-resize touch-none rounded-full border-[1.5px] border-blue-500 bg-white shadow-sm before:absolute before:bottom-0.5 before:right-0.5 before:size-1.5 before:bg-blue-500"
+      />
+      {/* rotate handle: above, with a stem */}
+      <div className="pointer-events-none absolute left-1/2 top-[-22px] h-5 w-px -translate-x-1/2 bg-emerald-500/60" />
+      <div
+        aria-label={`Rotate ${element.label}`}
+        onPointerDown={(e) => begin(e, "rotate")}
+        onPointerMove={move}
+        onPointerUp={end}
+        onPointerCancel={end}
+        className="absolute -top-7 left-1/2 size-4 -translate-x-1/2 cursor-grab touch-none rounded-full border-[1.5px] border-emerald-500 bg-white shadow-sm before:absolute before:inset-1 before:rounded-full before:bg-emerald-500 active:cursor-grabbing"
+      />
     </div>
   );
 }

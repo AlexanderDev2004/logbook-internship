@@ -39,16 +39,25 @@ export interface SignatureLayout {
   sigHeightEm: number;
   /** Height of the company stamp image, in em. Default 6. */
   stampHeightEm: number;
-  // All offsets are displacements from the element's natural column position,
+  // Offsets are displacements from the element's natural column position,
   // positive X = right, positive Y = down (negative Y = up). In em.
+  // Scale multiplies the element's base height; rotation is in degrees.
   stampOffsetXEm: number;
   stampOffsetYEm: number;
+  stampScale: number;
+  stampRot: number;
   studentOffsetXEm: number;
   studentOffsetYEm: number;
+  studentScale: number;
+  studentRot: number;
   fieldOffsetXEm: number;
   fieldOffsetYEm: number;
+  fieldScale: number;
+  fieldRot: number;
   advisorOffsetXEm: number;
   advisorOffsetYEm: number;
+  advisorScale: number;
+  advisorRot: number;
 }
 
 export const DEFAULT_SIGNATURE_LAYOUT: SignatureLayout = {
@@ -56,12 +65,20 @@ export const DEFAULT_SIGNATURE_LAYOUT: SignatureLayout = {
   stampHeightEm: 6,
   stampOffsetXEm: 4,
   stampOffsetYEm: -4,
+  stampScale: 1,
+  stampRot: 0,
   studentOffsetXEm: 0,
   studentOffsetYEm: 0,
+  studentScale: 1,
+  studentRot: 0,
   fieldOffsetXEm: 0,
   fieldOffsetYEm: 0,
+  fieldScale: 1,
+  fieldRot: 0,
   advisorOffsetXEm: 0,
   advisorOffsetYEm: 0,
+  advisorScale: 1,
+  advisorRot: 0,
 };
 
 export interface TypstWeek {
@@ -297,16 +314,19 @@ export async function generateLogBookTyp(
     w("        Mahasiswa,");
     const paths = sigPaths[wi];
     const sigH = num(layout.sigHeightEm);
-    const stampH = num(layout.stampHeightEm);
     const stampX = num(layout.stampOffsetXEm);
     const stampY = num(layout.stampOffsetYEm);
-    // Signature image optionally displaced by box-model offsets.
-    const sigImg = (path: string, x: number, y: number) =>
-      x || y
-        ? `#box(width: 100%, insets: (left: ${num(x)}em, top: ${num(y)}em))[#image("${path}", height: ${sigH}em)]`
-        : `#image("${path}", height: ${sigH}em)`;
+    // Signature image with box-model placement: offset (em), scale, rotation.
+    const sigImg = (path: string, x: number, y: number, scale: number, rot: number) => {
+      const h = num(layout.sigHeightEm * scale);
+      const img = `#image("${path}", height: ${h}em)`;
+      const content = rot ? `#rotate(${num(rot)}deg)[${img}]` : img;
+      return x || y || rot || scale !== 1
+        ? `#box(width: 100%, insets: (left: ${num(x)}em, top: ${num(y)}em))[${content}]`
+        : img;
+    };
     if (paths.student) {
-      w(`        ${sigImg(paths.student, layout.studentOffsetXEm, layout.studentOffsetYEm)}`);
+      w(`        ${sigImg(paths.student, layout.studentOffsetXEm, layout.studentOffsetYEm, layout.studentScale, layout.studentRot)}`);
     } else {
       w(`        #v(${sigH}em)`);
     }
@@ -316,13 +336,15 @@ export async function generateLogBookTyp(
     w("      [");
     w("        Pembimbing Lapangan,");
     if (paths.field_supervisor) {
-      w(`        ${sigImg(paths.field_supervisor, layout.fieldOffsetXEm, layout.fieldOffsetYEm)}`);
+      w(`        ${sigImg(paths.field_supervisor, layout.fieldOffsetXEm, layout.fieldOffsetYEm, layout.fieldScale, layout.fieldRot)}`);
     } else {
       w(`        #v(${sigH}em)`);
     }
     if (hasStamp) {
       // Stamp overlaps the signature area, like a stamped paper document.
-      w(`        #box(width: 100%, insets: (left: ${stampX}em, top: ${stampY}em))[#image("/img/stamp.png", height: ${stampH}em)]`);
+      const stampImg = `#image("/img/stamp.png", height: ${num(layout.stampHeightEm * layout.stampScale)}em)`;
+      const stampContent = layout.stampRot ? `#rotate(${num(layout.stampRot)}deg)[${stampImg}]` : stampImg;
+      w(`        #box(width: 100%, insets: (left: ${stampX}em, top: ${stampY}em))[${stampContent}]`);
     }
     w(
       `        ${esc(week.signatures?.field_supervisor?.signerName || settings.fieldSupervisorName)}`,
@@ -331,7 +353,7 @@ export async function generateLogBookTyp(
     w("      [], [");
     w("        Dosen Pembimbing,");
     if (paths.academic_advisor) {
-      w(`        ${sigImg(paths.academic_advisor, layout.advisorOffsetXEm, layout.advisorOffsetYEm)}`);
+      w(`        ${sigImg(paths.academic_advisor, layout.advisorOffsetXEm, layout.advisorOffsetYEm, layout.advisorScale, layout.advisorRot)}`);
     } else {
       w(`        #v(${sigH}em)`);
     }
