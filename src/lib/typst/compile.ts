@@ -4,7 +4,6 @@ import {
   CompileFormatEnum,
   type TypstCompiler,
 } from "@myriaddreamin/typst.ts/compiler";
-import { loadFonts } from "@myriaddreamin/typst.ts/options.init";
 // The compiler WASM is ~27 MB, which exceeds Cloudflare Workers' 25 MB
 // per-file static asset limit, so it is loaded from a pinned CDN build of the
 // same package version instead of being bundled with the app.
@@ -18,15 +17,35 @@ const FONT_FILES = [
   "/fonts/Carlito-Bold.ttf",
 ];
 
+// The library's URL-string font loading silently fails on relative paths, so
+// fetch the TTF bytes ourselves and hand the compiler raw font data.
+async function fetchFontFiles(): Promise<Uint8Array[]> {
+  const all = await Promise.all(
+    FONT_FILES.map(async (path) => {
+      const res = await fetch(path);
+      if (!res.ok) throw new Error(`Font ${path} not available (${res.status})`);
+      return new Uint8Array(await res.arrayBuffer());
+    }),
+  );
+  return all;
+}
+
 let compilerPromise: Promise<TypstCompiler> | null = null;
 
 async function getCompiler(): Promise<TypstCompiler> {
   if (!compilerPromise) {
     compilerPromise = (async () => {
+      const fonts = await fetchFontFiles();
       const c = createTypstCompiler();
       await c.init({
         getModule: () => COMPILER_WASM_URL,
-        beforeBuild: [loadFonts(FONT_FILES)],
+        beforeBuild: [
+          async (_mark, { builder }) => {
+            for (const font of fonts) {
+              await builder.add_raw_font(font);
+            }
+          },
+        ],
       });
       return c;
     })();

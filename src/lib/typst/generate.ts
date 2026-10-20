@@ -92,7 +92,9 @@ export interface GeneratedTyp {
 }
 
 const FONT_MAP: Record<string, string> = {
-  "Times New Roman": "Liberation Serif",
+  // The bundled TTF (public/fonts/LiberationSerif-*.ttf) registers its
+  // family as "TypoPRO Liberation Serif"; Carlito's is plain "Carlito".
+  "Times New Roman": "TypoPRO Liberation Serif",
   Calibri: "Carlito",
 };
 
@@ -322,7 +324,7 @@ export async function generateLogBookTyp(
       const img = `#image("${path}", height: ${h}em)`;
       const content = rot ? `#rotate(${num(rot)}deg)[${img}]` : img;
       return x || y || rot || scale !== 1
-        ? `#box(width: 100%, insets: (left: ${num(x)}em, top: ${num(y)}em))[${content}]`
+        ? `#box(width: 100%, inset: (left: ${num(x)}em, top: ${num(y)}em))[${content}]`
         : img;
     };
     if (paths.student) {
@@ -344,7 +346,7 @@ export async function generateLogBookTyp(
       // Stamp overlaps the signature area, like a stamped paper document.
       const stampImg = `#image("/img/stamp.png", height: ${num(layout.stampHeightEm * layout.stampScale)}em)`;
       const stampContent = layout.stampRot ? `#rotate(${num(layout.stampRot)}deg)[${stampImg}]` : stampImg;
-      w(`        #box(width: 100%, insets: (left: ${stampX}em, top: ${stampY}em))[${stampContent}]`);
+      w(`        #box(width: 100%, inset: (left: ${stampX}em, top: ${stampY}em))[${stampContent}]`);
     }
     w(
       `        ${esc(week.signatures?.field_supervisor?.signerName || settings.fieldSupervisorName)}`,
