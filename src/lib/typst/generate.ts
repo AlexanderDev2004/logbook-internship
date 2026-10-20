@@ -222,47 +222,50 @@ export async function generateLogBookTyp(
   const w = (s = "") => out.push(s);
 
   // ---- header ----
+  // Explicit block spacing instead of blank paragraphs: an empty markup line
+  // costs a full ~14pt paragraph, which pushed the week-1 signature block off
+  // the page and left a big hole under the activities table.
   w("#set page(margin: 1in)");
   w(`#set text(size: 12pt, font: "${fontHeading}", hyphenate: false)`);
-  w("");
-  w("#box()[");
-  w(`  ${t(2)}#box()[`);
-  if (hasLogo) w(`    #image("/img/logo.png", height: 3.17cm)`);
-  w("  ]");
-  w("  #box(width: 1fr)[");
-  w("    #align(center + horizon)[");
+  w("#block(above: 0pt, below: 0.7em)[");
+  w("  #box()[");
+  w(`    ${t(2)}#box()[`);
+  if (hasLogo) w(`      #image("/img/logo.png", height: 3.17cm)`);
+  w("    ]");
+  w("    #box(width: 1fr)[");
+  w("      #align(center + horizon)[");
   const [l0 = "", l1 = "", l2 = "", l3 = ""] = settings.institutionLines;
-  w(`      #text(size: 14pt)[`);
+  w(`        #text(size: 14pt)[`);
   // A single "\" at end of line is a Typst line break, like the original template.
-  w(`        ${esc(l0)}\\`);
-  w(`        ${esc(l1)}\\`);
-  w("      ]");
-  w(`      ${esc(l2)}\\`);
-  w(`      *${esc(l3)}*\\`);
-  w("      #text(size: 9pt)[");
+  w(`          ${esc(l0)}\\`);
+  w(`          ${esc(l1)}\\`);
+  w("        ]");
+  w(`        ${esc(l2)}\\`);
+  w(`        *${esc(l3)}*\\`);
+  w("        #text(size: 9pt)[");
   settings.subLines.forEach((line) => {
-    w(`        ${esc(line)}\\`);
+    w(`          ${esc(line)}\\`);
   });
+  w("        ]");
   w("      ]");
   w("    ]");
   w("  ]");
   w("]");
-  w("");
-  w("#box()[");
+  w("#block(above: 0pt, below: 0.6em)[");
   w("  #line(length: 100%, stroke: 2.25pt)");
-  w("  #text(size: 11pt)[]");
   w("]");
-  w("");
-  w("#align(center)[");
+  w("#block(above: 0pt, below: 0.7em)[");
+  w("  #align(center)[");
   settings.titleLines.forEach((line) => {
-    w(`  *${esc(line)}*\\`);
+    w(`    *${esc(line)}*\\`);
   });
+  w("  ]");
   w("]");
-  w("");
 
   // ---- student info table ----
   w(`#set text(size: 11pt, font: "${fontHeading}")`);
-  w("#box(inset: 0pt, outset: 0pt)[");
+  w("#block(above: 0pt, below: 0.7em)[");
+  w("  #box(inset: 0pt, outset: 0pt)[");
   w("  #table(");
   w("    columns: (1fr, 1fr),");
   w("    rows: 0.63cm,");
@@ -273,8 +276,8 @@ export async function generateLogBookTyp(
   w(`    [*Program Studi*], [*: ${esc(settings.studyProgram)}*],`);
   w(`    [*Nama Mitra*], [*: ${esc(settings.partnerName)}*],`);
   w("  )");
+  w("  ]");
   w("]");
-  w("");
 
   weeks.forEach((week, wi) => {
     if (wi > 0) {
@@ -290,7 +293,7 @@ export async function generateLogBookTyp(
     w("    inset: 2.5pt,");
     w("    stroke: 0.5pt,");
     w("    columns: (1fr, 2.75cm, 2.5cm, 7.75cm),");
-    w("    rows: (auto, 1.6cm),");
+    w("    rows: (auto, 1.4cm),");
     w("    table.header(");
     w("      table.cell(fill: gray)[*Hari, Tanggal*],");
     w("      table.cell(fill: gray)[*Jam Masuk*],");
@@ -307,8 +310,10 @@ export async function generateLogBookTyp(
     w("]");
 
     // ---- signature block (kept together on one page) ----
-    w("  #v(1em)");
+    w("  #v(0.5em)");
     w("  #block(breakable: false)[");
+    // Tight cell spacing so labels sit close to the signature images.
+    w("    #set par(spacing: 0.5em)");
     w("    #grid(");
     w("      columns: (3fr, 4fr, 3fr),");
     w("      gutter: 0pt,");
@@ -344,9 +349,12 @@ export async function generateLogBookTyp(
     }
     if (hasStamp) {
       // Stamp overlaps the signature area, like a stamped paper document.
+      // The zero-height block keeps the stamp out of the text flow — a plain
+      // inset box reserves its full height and pushed the supervisor's name
+      // far below the signature image.
       const stampImg = `#image("/img/stamp.png", height: ${num(layout.stampHeightEm * layout.stampScale)}em)`;
       const stampContent = layout.stampRot ? `#rotate(${num(layout.stampRot)}deg)[${stampImg}]` : stampImg;
-      w(`        #box(width: 100%, inset: (left: ${stampX}em, top: ${stampY}em))[${stampContent}]`);
+      w(`        #block(height: 0pt, width: 100%)[#box(width: 100%, inset: (left: ${stampX}em, top: ${stampY}em))[${stampContent}]]`);
     }
     w(
       `        ${esc(week.signatures?.field_supervisor?.signerName || settings.fieldSupervisorName)}`,

@@ -304,8 +304,8 @@ function PageCanvas({
               </div>
             ))}
           </div>
-          {/* signature block, pinned to the bottom like the PDF */}
-          <div className="mt-auto grid" style={{ gridTemplateColumns: "3fr 4fr 3fr" }}>
+          {/* signature block follows the table, like the real PDF */}
+          <div className="mt-3 grid" style={{ gridTemplateColumns: "3fr 4fr 3fr" }}>
             {/* row 1: student (right column) */}
             <div /><div />
             <div>
