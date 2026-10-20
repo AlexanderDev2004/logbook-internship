@@ -11,7 +11,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Slider } from "@/components/ui/slider";
-import { Eye, GripHorizontal, Loader2, Printer, RotateCcw } from "lucide-react";
+import { Eye, Loader2, Printer, RotateCcw } from "lucide-react";
 import {
   DEFAULT_SIGNATURE_LAYOUT,
   type SignatureLayout,
@@ -55,11 +55,13 @@ interface PdfPreviewProps {
   label?: string;
 }
 
-// Visual scale of the box-model editor: pixels per em.
-const PX_PER_EM = 11;
-// Editor origin inside each column so negative offsets stay visible.
-const ORIGIN_X = 6;
-const ORIGIN_Y = 56;
+// Page-canvas editor geometry: a miniature A4 page with the PDF's real page
+// setup (1in margins, 12pt body text), so box positions read WYSIWYG.
+const PAGE_W = 420;
+const PAGE_H = Math.round(PAGE_W * (297 / 210)); // ≈ 594
+const PAGE_MARGIN = Math.round(PAGE_W * (25.4 / 210)); // 1in ≈ 51px
+// Pixels per Typst em: 12pt = 4.233mm on a 210mm-wide page.
+const PX_PER_EM = PAGE_W * (4.2333 / 210); // ≈ 8.47
 // Drag range clamps (em).
 const X_MIN = -4, X_MAX = 16, Y_MIN = -8, Y_MAX = 12;
 // Scale / rotation clamps.
@@ -67,14 +69,9 @@ const SCALE_MIN = 0.3, SCALE_MAX = 3;
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
 const round = (v: number, step: number) => Number((Math.round(v / step) * step).toFixed(6));
 
-// Base box sizes in editor px (at scale 1). Signature images are 4em tall
-// (44px), the stamp is 6em (66px); widths approximate a real signature.
-const BASE_SIZE: Record<string, { w: number; h: number }> = {
-  student: { w: 110, h: 44 },
-  field: { w: 110, h: 44 },
-  advisor: { w: 110, h: 44 },
-  stamp: { w: 66, h: 66 },
-};
+// Signature image aspect (w/h ≈ 2.5, approximating a real signature); the
+// company stamp is square.
+const SIG_ASPECT = 110 / 44;
 
 const ELEMENTS: Array<{
   role: string;
@@ -190,25 +187,35 @@ export function PdfPreview({ buildPdf, downloadPdf, loadImages, label }: PdfPrev
           </DialogDescription>
         </DialogHeader>
         <div className="flex min-h-0 flex-1 gap-4">
-          <div className="relative min-w-0 flex-1 rounded-md border bg-muted">
-            {url ? (
-              <iframe title="PDF Preview" src={url} className="size-full rounded-md" />
-            ) : (
-              <div className="flex size-full items-center justify-center text-sm text-muted-foreground">
-                {building ? "Menyusun PDF…" : "Menunggu…"}
-              </div>
-            )}
-            {building && (
-              <div className="absolute inset-0 flex items-center justify-center bg-background/60">
-                <Loader2 className="size-6 animate-spin" />
-              </div>
-            )}
-          </div>
-          <div className="flex w-72 shrink-0 flex-col gap-3 overflow-y-auto pr-1">
-            <BoxModelEditor layout={layout} images={images} onLayoutChange={(next) => {
+          <PageCanvas
+            layout={layout}
+            images={images}
+            onLayoutChange={(next) => {
               setLayout(next);
               persistSignatureLayout(next);
-            }} />
+            }}
+          />
+          <div className="flex w-72 shrink-0 flex-col gap-3 overflow-y-auto pr-1">
+            <div className="space-y-1.5">
+              <Label className="flex items-center gap-1.5">
+                <Eye className="size-3.5 text-muted-foreground" />
+                Hasil PDF
+              </Label>
+              <div className="relative h-56 rounded-md border bg-muted">
+                {url ? (
+                  <iframe title="PDF Preview" src={url} className="size-full rounded-md" />
+                ) : (
+                  <div className="flex size-full items-center justify-center text-sm text-muted-foreground">
+                    {building ? "Menyusun PDF…" : "Menunggu…"}
+                  </div>
+                )}
+                {building && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-background/60">
+                    <Loader2 className="size-6 animate-spin" />
+                  </div>
+                )}
+              </div>
+            </div>
             <Separator />
             <div className="space-y-4">
               <div className="space-y-2">
@@ -255,11 +262,12 @@ export function PdfPreview({ buildPdf, downloadPdf, loadImages, label }: PdfPrev
 }
 
 /**
- * Box-model editor: a miniature of the signature block where each element is
- * a draggable box. Dragging updates the em offsets that the Typst generator
- * applies as box insets.
+ * Page-canvas editor: a miniature A4 page mirroring the PDF's real page setup
+ * (1in margins, 12pt text, 3fr/4fr/3fr signature grid). Each signature and the
+ * stamp sit at their true natural position; dragging updates the em offsets
+ * that the Typst generator applies as box insets.
  */
-function BoxModelEditor({
+function PageCanvas({
   layout,
   images,
   onLayoutChange,
@@ -268,28 +276,70 @@ function BoxModelEditor({
   images: SignatureImages | null;
   onLayoutChange: (layout: SignatureLayout) => void;
 }) {
+  const sigH = layout.sigHeightEm * PX_PER_EM;
+  const nameLine = <div className="mx-auto h-1.5 w-3/4 rounded bg-neutral-300" />;
   return (
-    <div className="space-y-2">
-      <Label className="flex items-center gap-1.5">
-        <GripHorizontal className="size-3.5 text-muted-foreground" />
-        Posisi manual — geser, resize, rotasi
-      </Label>
-      <div className="grid grid-cols-[3fr_4fr_3fr] gap-px overflow-hidden rounded-md border bg-muted">
-        {/* Left column: student */}
-        <div className="relative h-60 bg-background">
-          <DragBox element={ELEMENTS[0]!} layout={layout} images={images} onLayoutChange={onLayoutChange} />
-          <span className="pointer-events-none absolute bottom-1 left-1 text-[10px] text-muted-foreground">Mahasiswa</span>
-        </div>
-        {/* Middle column: field supervisor + stamp */}
-        <div className="relative h-60 bg-background">
-          <DragBox element={ELEMENTS[1]!} layout={layout} images={images} onLayoutChange={onLayoutChange} />
-          <DragBox element={ELEMENTS[2]!} layout={layout} images={images} onLayoutChange={onLayoutChange} />
-          <span className="pointer-events-none absolute bottom-1 left-1 text-[10px] text-muted-foreground">Pembimbing Lapangan</span>
-        </div>
-        {/* Right column: academic advisor */}
-        <div className="relative h-60 bg-background">
-          <DragBox element={ELEMENTS[3]!} layout={layout} images={images} onLayoutChange={onLayoutChange} />
-          <span className="pointer-events-none absolute bottom-1 left-1 text-[10px] text-muted-foreground">Dosen Pembimbing</span>
+    <div className="flex min-h-0 min-w-0 flex-1 items-start justify-center overflow-auto rounded-md border bg-muted p-3">
+      <div className="relative shrink-0 bg-white shadow-md" style={{ width: PAGE_W, height: PAGE_H }}>
+        <div className="absolute inset-0 flex flex-col" style={{ padding: PAGE_MARGIN }}>
+          {/* header skeleton: logo + institution lines */}
+          <div className="flex items-start gap-2">
+            <div className="size-10 shrink-0 rounded-sm border border-neutral-300 bg-neutral-100" />
+            <div className="flex-1 space-y-1 pt-1">
+              <div className="mx-auto h-1.5 w-3/4 rounded bg-neutral-300" />
+              <div className="mx-auto h-1 w-1/2 rounded bg-neutral-200" />
+              <div className="mx-auto h-1 w-2/3 rounded bg-neutral-200" />
+            </div>
+          </div>
+          {/* title */}
+          <div className="mx-auto mt-3 h-2 w-1/2 rounded bg-neutral-300" />
+          {/* activities table skeleton */}
+          <div className="mt-3 border border-neutral-300">
+            <div className="grid grid-cols-4 divide-x divide-neutral-300 border-b border-neutral-300 bg-neutral-100">
+              <div className="h-3" /><div className="h-3" /><div className="h-3" /><div className="h-3" />
+            </div>
+            {[0, 1, 2].map((r) => (
+              <div key={r} className="grid grid-cols-4 divide-x divide-neutral-300 border-b border-neutral-200 last:border-b-0">
+                <div className="h-6" /><div className="h-6" /><div className="h-6" /><div className="h-6" />
+              </div>
+            ))}
+          </div>
+          {/* signature block, pinned to the bottom like the PDF */}
+          <div className="mt-auto grid" style={{ gridTemplateColumns: "3fr 4fr 3fr" }}>
+            {/* row 1: student (right column) */}
+            <div /><div />
+            <div>
+              <div className="text-[7px] leading-tight text-neutral-600">Mahasiswa,</div>
+              <div className="relative" style={{ height: sigH }}>
+                <DragBox element={ELEMENTS[0]!} layout={layout} images={images} onLayoutChange={onLayoutChange} />
+              </div>
+              {nameLine}
+            </div>
+            {/* row 2: Mengetahui (left), field supervisor + stamp (right) */}
+            <div className="text-[7px] leading-tight text-neutral-600">Mengetahui,</div>
+            <div />
+            <div>
+              <div className="text-[7px] leading-tight text-neutral-600">Pembimbing Lapangan,</div>
+              <div className="relative" style={{ height: sigH }}>
+                <DragBox element={ELEMENTS[1]!} layout={layout} images={images} onLayoutChange={onLayoutChange} />
+              </div>
+              {/* stamp flows after the signature image, shifted by its insets */}
+              <div className="relative size-0">
+                <DragBox element={ELEMENTS[2]!} layout={layout} images={images} onLayoutChange={onLayoutChange} />
+              </div>
+              {nameLine}
+            </div>
+            {/* row 3: academic advisor (middle column) */}
+            <div />
+            <div>
+              <div className="text-[7px] leading-tight text-neutral-600">Dosen Pembimbing,</div>
+              <div className="relative" style={{ height: sigH }}>
+                <DragBox element={ELEMENTS[3]!} layout={layout} images={images} onLayoutChange={onLayoutChange} />
+              </div>
+              {nameLine}
+            </div>
+            <div />
+          </div>
         </div>
       </div>
     </div>
@@ -328,9 +378,10 @@ function DragBox({
   const scale = layout[element.keyScale] as number;
   const rot = layout[element.keyRot] as number;
   const src = element.imageKey ? (images?.[element.imageKey] ?? null) : null;
-  const base = BASE_SIZE[element.role]!;
-  const w = base.w * scale;
-  const h = base.h * scale;
+  // WYSIWYG box size: the same em height the Typst generator renders.
+  const em = element.role === "stamp" ? layout.stampHeightEm : layout.sigHeightEm;
+  const h = em * scale * PX_PER_EM;
+  const w = element.role === "stamp" ? h : h * SIG_ASPECT;
 
   const set = (nx: number, ny: number, nscale: number, nrot: number) => {
     onLayoutChange({
@@ -414,7 +465,7 @@ function DragBox({
       className={`absolute cursor-grab touch-none select-none rounded border border-dashed border-primary/60 bg-primary/5 hover:outline hover:outline-1 hover:outline-blue-500/80 active:cursor-grabbing ${
         element.role === "stamp" ? "z-10 border-solid border-primary" : ""
       }`}
-      style={{ left: x * PX_PER_EM + ORIGIN_X, top: y * PX_PER_EM + ORIGIN_Y, width: w, height: h }}
+      style={{ left: x * PX_PER_EM, top: y * PX_PER_EM, width: w, height: h }}
     >
       {/* content rotates/scales with the layout; handles stay axis-aligned */}
       <div
