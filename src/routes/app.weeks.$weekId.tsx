@@ -17,6 +17,7 @@ import { Separator } from "@/components/ui/separator";
 import { Copy, FileDown, Plus, Sparkles, Trash2 } from "lucide-react";
 import { downloadWeeksPdf, previewWeeksPdf } from "@/lib/typst/pdf-client";
 import { GitImport } from "@/components/GitImport";
+import { DermagaImport } from "@/components/DermagaImport";
 import { PdfPreview } from "@/components/PdfPreview";
 import { SignatureCanvas } from "@/components/SignatureCanvas";
 import {
@@ -248,6 +249,11 @@ function WeekDetailPage() {
                 </div>
                 <div className="flex justify-end gap-2">
                   <GitImport
+                    weekId={data.week.id}
+                    startDate={data.week.startDate}
+                    onImported={refresh}
+                  />
+                  <DermagaImport
                     weekId={data.week.id}
                     startDate={data.week.startDate}
                     onImported={refresh}
