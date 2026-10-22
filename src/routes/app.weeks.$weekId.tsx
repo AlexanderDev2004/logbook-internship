@@ -17,7 +17,7 @@ import { Separator } from "@/components/ui/separator";
 import { Copy, FileDown, Plus, Sparkles, Trash2 } from "lucide-react";
 import { downloadWeeksPdf, previewWeeksPdf } from "@/lib/typst/pdf-client";
 import { GitImport } from "@/components/GitImport";
-import { DermagaImport } from "@/components/DermagaImport";
+import { DermagaExport } from "@/components/DermagaExport";
 import { PdfPreview } from "@/components/PdfPreview";
 import { SignatureCanvas } from "@/components/SignatureCanvas";
 import {
@@ -253,10 +253,14 @@ function WeekDetailPage() {
                     startDate={data.week.startDate}
                     onImported={refresh}
                   />
-                  <DermagaImport
-                    weekId={data.week.id}
-                    startDate={data.week.startDate}
-                    onImported={refresh}
+                  <DermagaExport
+                    weekLabel={data.week.label}
+                    entries={data.entries.map((e) => ({
+                      date: e.entryDate,
+                      clockIn: e.clockIn,
+                      clockOut: e.clockOut,
+                      activity: e.activity,
+                    }))}
                   />
                   <Button onClick={addEntry} disabled={busy || !activity.trim()}>
                     <Plus /> Add entry
