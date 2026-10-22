@@ -53,7 +53,9 @@ async function dfMain() {
       });
     } catch (e) { log('Gagal parse: ' + e.message, false); }
   };
-  // Best-effort clipboard prefill, never blocking the handlers above.
+  /* Best-effort clipboard prefill, never blocking the handlers above. Keep
+     this a block comment: the bookmarklet collapses newlines, and a line
+     comment would then swallow the rest of the code. */
   navigator.clipboard.readText().then(function (t) {
     if (t && !document.getElementById('df-data').value) document.getElementById('df-data').value = t;
   }).catch(function () { /* permission denied: manual paste is fine */ });
